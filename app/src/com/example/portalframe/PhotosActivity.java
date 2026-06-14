@@ -1,8 +1,10 @@
 package com.example.portalframe;
 
 import android.app.Activity;
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.provider.Settings;
 import android.graphics.Color;
 import android.graphics.ImageFormat;
 import android.graphics.Rect;
@@ -56,6 +58,8 @@ public class PhotosActivity extends Activity {
 
     private static final String TAG = "PortalFrame";
     private static final int REQ_CAMERA = 1;
+    private static final String SCREENSAVER_COMPONENT =
+            "com.example.portalframe/com.example.portalframe.FrameDreamService";
 
     private static final long[] DELAY_CHOICES = {4000L, 6000L, 10000L, 30000L, 60000L};
     private static final long[] FADE_CHOICES = {2000L, 1200L, 500L}; // Slow, Normal, Fast
@@ -81,6 +85,7 @@ public class PhotosActivity extends Activity {
     private TextView scanHint;
     private volatile boolean scanning = false;
     private boolean stopArmed = false; // "Stop showing photos" two-tap confirm
+    private boolean showingStatus = false; // re-check screensaver state on return
     private int previewW, previewH;    // cached so we don't hit getParameters() per frame
     private int frameCount;
 
@@ -95,9 +100,47 @@ public class PhotosActivity extends Activity {
     }
 
     @Override
+    protected void onResume() {
+        super.onResume();
+        // Returning from the system Screen-saver picker: refresh the status so the
+        // "Screensaver" card reflects the new selection.
+        if (showingStatus) {
+            showStatus();
+        }
+    }
+
+    @Override
     protected void onPause() {
         super.onPause();
         stopCamera();
+    }
+
+    // ------------------------------------------------ screensaver setup
+
+    /** True if Portal Frame is the enabled system screensaver. */
+    private boolean isOurScreensaver() {
+        try {
+            boolean enabled = Settings.Secure.getInt(
+                    getContentResolver(), "screensaver_enabled", 0) == 1;
+            String comp = Settings.Secure.getString(
+                    getContentResolver(), "screensaver_components");
+            return enabled && comp != null && comp.contains(getPackageName());
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * Deep-link to the system Screen-saver picker, where the user selects
+     * "Portal Frame". A normal app can't set the screensaver itself (it needs
+     * WRITE_SECURE_SETTINGS), but the Settings app can — so this is the no-ADB path.
+     */
+    private void openScreensaverSettings() {
+        try {
+            startActivity(new Intent(Settings.ACTION_DREAM_SETTINGS));
+        } catch (Exception e) {
+            toast("Open Settings → Display → Screen saver, then choose Portal Frame");
+        }
     }
 
     // ---------------------------------------------------------------- prefs
@@ -127,6 +170,7 @@ public class PhotosActivity extends Activity {
     private void showStatus() {
         stopCamera();
         stopArmed = false;
+        showingStatus = true;
         root.removeAllViews();
         LinearLayout col = Ui.screen(this, root);
 
@@ -134,6 +178,26 @@ public class PhotosActivity extends Activity {
         final boolean hasAlbum = url != null && !url.isEmpty();
 
         col.addView(Ui.title(this, hasAlbum ? "Your photos" : "Show your Google Photos"));
+
+        // Screensaver setup — the slideshow only runs once "Portal Frame" is chosen
+        // in the system Screen-saver picker (a normal app can't set this itself).
+        final boolean ssActive = isOurScreensaver();
+        LinearLayout ssCard = Ui.card(this);
+        ssCard.addView(Ui.sectionLabel(this, "Screensaver"));
+        TextView ssBody = Ui.body(this, ssActive
+                ? "✓ Portal Frame is your screensaver. Your photos appear when the Portal is idle."
+                : "Almost there — tap below, then choose “Portal Frame” so your photos show "
+                        + "when the Portal is idle.");
+        topMargin(ssBody, 6);
+        ssCard.addView(ssBody);
+        col.addView(ssCard);
+        col.addView(ssActive
+                ? Ui.secondary(this, "Change screensaver", new Runnable() {
+                    @Override public void run() { openScreensaverSettings(); }
+                })
+                : Ui.primary(this, "Use as screensaver", new Runnable() {
+                    @Override public void run() { openScreensaverSettings(); }
+                }));
 
         if (hasAlbum) {
             LinearLayout card = Ui.card(this);
@@ -269,6 +333,7 @@ public class PhotosActivity extends Activity {
     private void showManualEntry() {
         stopCamera();
         stopArmed = false;
+        showingStatus = false;
         root.removeAllViews();
         LinearLayout col = Ui.screen(this, root);
 
@@ -358,6 +423,7 @@ public class PhotosActivity extends Activity {
 
     private void showScanner() {
         stopArmed = false;
+        showingStatus = false;
         root.removeAllViews();
 
         FrameLayout f = new FrameLayout(this);
