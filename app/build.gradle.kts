@@ -1,5 +1,7 @@
 plugins {
     id("com.android.application") version "8.13.2"
+    id("org.jetbrains.kotlin.android") version "2.4.0"
+    id("org.jetbrains.kotlin.plugin.compose") version "2.4.0"
 }
 
 android {
@@ -19,10 +21,15 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    // Build the existing in-place layout (no file moves yet) — Gradle Milestone 1.
+    buildFeatures {
+        compose = true
+    }
+
+    // Build the existing in-place layout (no file moves during the migration).
     sourceSets["main"].apply {
         manifest.srcFile("AndroidManifest.xml")
         java.setSrcDirs(listOf("src"))
+        kotlin.setSrcDirs(listOf("src"))
         res.setSrcDirs(listOf("res"))
         assets.setSrcDirs(listOf("assets"))
     }
@@ -34,6 +41,21 @@ android {
     }
 }
 
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+    }
+}
+
 dependencies {
     implementation(files("libs/zxing-core-3.5.3.jar"))
+
+    val composeBom = platform("androidx.compose:compose-bom:2026.05.01")
+    implementation(composeBom)
+    implementation("androidx.compose.ui:ui")
+    implementation("androidx.compose.ui:ui-graphics")
+    implementation("androidx.compose.foundation:foundation")
+    implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.material:material-icons-core")
+    implementation("androidx.activity:activity-compose:1.12.4")
 }

@@ -52,6 +52,13 @@
             </intent-filter>
         </activity>
 
+        <!-- Compose-on-Portal smoke test (migration Milestone 2). -->
+        <activity
+            android:name=".ComposeSmokeActivity"
+            android:exported="true"
+            android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen"
+            android:screenOrientation="landscape" />
+
         <!-- Set the Google Photos shared-album URL over ADB (see ConfigReceiver). -->
         <receiver
             android:name=".ConfigReceiver"
