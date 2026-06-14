@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -108,7 +109,7 @@ class SettingsActivity : ComponentActivity() {
             contentAlignment = Alignment.TopCenter,
         ) {
             Column(
-                Modifier.widthIn(max = 760.dp).fillMaxWidth()
+                Modifier.widthIn(max = 1100.dp).fillMaxWidth()
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 40.dp, vertical = 72.dp),
             ) {
@@ -116,8 +117,11 @@ class SettingsActivity : ComponentActivity() {
                     if (hasAlbum) "Your photos" else "Show your Google Photos",
                     color = PortalColors.Text, fontSize = 30.sp, fontWeight = FontWeight.Bold,
                 )
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(8.dp))
 
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+                  // -------------------------------------------------- LEFT column
+                  Column(Modifier.weight(1f)) {
                 // Screensaver
                 Card("Screensaver") {
                     val active = isOurScreensaver()
@@ -166,7 +170,12 @@ class SettingsActivity : ComponentActivity() {
                         }
                     }
                 }
+                  } // end LEFT column
 
+                  Spacer(Modifier.width(24.dp))
+
+                  // -------------------------------------------------- RIGHT column
+                  Column(Modifier.weight(1f)) {
                 // Slideshow
                 Card("Slideshow") {
                     CycleRow("Seconds per photo", fmtDelay(getLong(ConfigReceiver.KEY_DELAY_MS, 6000))) {
@@ -202,6 +211,8 @@ class SettingsActivity : ComponentActivity() {
                     Divider()
                     ToggleRow("On This Day memories", ConfigReceiver.KEY_ON_THIS_DAY, true) { tick++ }
                 }
+                  } // end RIGHT column
+                } // end Row
 
                 Spacer(Modifier.height(20.dp))
                 Button(
