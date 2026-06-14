@@ -1,18 +1,29 @@
 # Frame — Install & User Guide
 
 Turn your **Meta Portal Go** into a digital photo frame that plays your **Google Photos**
-albums whenever it's idle. This guide assumes someone has given you a ready-to-install
-**`Frame.apk`** file — you don't need to build anything.
+albums whenever it's idle. You install a ready-made `Frame-*.apk` — you don't need to build
+anything.
 
 > New here? You'll do three things once: **install** the app, **add your album**, and
 > **turn it on as the screensaver**. After that it just runs.
 
 ---
 
+## Get the app
+
+Download the latest **`Frame-vX.Y.Z.apk`** from the project's **Releases** page:
+
+- **<https://github.com/Ishtiaqhossain/Portal-Frame/releases/latest>**
+
+Grab the `.apk` asset under **Assets** (the `.apk.sha256` file next to it is an optional checksum
+to verify the download). Save it to the computer you'll use in Part 1.
+
+---
+
 ## What you'll need
 
 - A **Meta Portal Go**, charged and connected to Wi‑Fi.
-- The **`Frame.apk`** file you were given.
+- The **`Frame-*.apk`** you downloaded above.
 - A **computer** (Mac, Windows, or Linux) and a **USB cable** to connect the Portal — this is
   the one-time step to get the app onto the device. (The Portal has no app store, so apps are
   "sideloaded" from a computer.)
@@ -41,16 +52,16 @@ Installing uses a free Google tool called **ADB** (Android Debug Bridge).
 ### 3. Connect and install
 1. Connect the Portal to the computer with the USB cable.
 2. On the Portal, accept the **"Allow USB debugging?"** prompt (tap **Allow**).
-3. On the computer, run:
+3. On the computer, run (use the actual file name you downloaded):
    ```
-   adb devices          # should list your Portal (tap "Allow" on the Portal if prompted)
-   adb install Frame.apk
+   adb devices                              # should list your Portal (tap "Allow" on the Portal if prompted)
+   adb install ~/Downloads/Frame-v1.0.0.apk
    ```
-   (Use the full path to the file if needed, e.g. `adb install ~/Downloads/Frame.apk`.)
 4. When it prints **`Success`**, you're done — a **Frame** icon now appears on the Portal's home
    screen. You can unplug the USB cable.
 
-> Updating later? Use `adb install -r Frame.apk` (the `-r` keeps your settings and album).
+> Updating later? Download the newer `Frame-*.apk` from Releases and run
+> `adb install -r ~/Downloads/Frame-vX.Y.Z.apk` (the `-r` keeps your settings and album).
 
 ---
 
