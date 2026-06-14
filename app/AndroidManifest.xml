@@ -1,10 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.example.portalframe"
     android:versionCode="1"
     android:versionName="1.0">
 
-    <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="29" />
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
@@ -39,11 +37,9 @@
             </intent-filter>
         </service>
 
-        <!-- On-device setup: pick the Google Photos album by scanning its QR code,
-             and tune the slideshow (delay / shuffle / transition). Shown as the
-             "Photos" app icon on the Portal home. -->
+        <!-- The "Photos" app icon: the Compose settings/setup screen (Milestone 3). -->
         <activity
-            android:name=".PhotosActivity"
+            android:name=".SettingsActivity"
             android:exported="true"
             android:label="Photos"
             android:icon="@mipmap/ic_launcher"
@@ -54,6 +50,22 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Camera QR scanner + manual entry (still view-based; SettingsActivity
+             hands off here with a "goto" extra). Ported to Compose in a later step. -->
+        <activity
+            android:name=".PhotosActivity"
+            android:exported="true"
+            android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen"
+            android:screenOrientation="landscape" />
+
+        <!-- Compose slideshow (migration Milestone 4) — develop/verify alongside the
+             Java MainActivity screensaver; becomes the dream target once at parity. -->
+        <activity
+            android:name=".SlideshowComposeActivity"
+            android:exported="true"
+            android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen"
+            android:screenOrientation="landscape" />
 
         <!-- Set the Google Photos shared-album URL over ADB (see ConfigReceiver). -->
         <receiver

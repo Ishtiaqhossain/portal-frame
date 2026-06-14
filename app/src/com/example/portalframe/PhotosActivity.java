@@ -96,7 +96,15 @@ public class PhotosActivity extends Activity {
         root = new FrameLayout(this);
         root.setBackgroundColor(Ui.BG);
         setContentView(root);
-        showStatus();
+        // The Compose SettingsActivity hands off here for the camera / manual flows.
+        String goto_ = getIntent() != null ? getIntent().getStringExtra("goto") : null;
+        if ("scan".equals(goto_)) {
+            startScan();
+        } else if ("manual".equals(goto_)) {
+            showManualEntry();
+        } else {
+            showStatus();
+        }
     }
 
     @Override
