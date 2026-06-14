@@ -5,10 +5,12 @@ import android.content.SharedPreferences;
 import android.content.res.AssetManager;
 import android.graphics.Bitmap;
 import android.graphics.Color;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.DisplayMetrics;
 import android.util.Log;
+import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
@@ -85,33 +87,59 @@ public class SlideshowController {
         front = newImageView();
         front.setAlpha(0f);
 
+        int margin = Ui.dp(context, 28);
+
+        // Gradient scrims so the white system-overlay pills (top) and our caption
+        // text (bottom) stay legible over bright photos — per the Portal design rules.
+        View topScrim = new View(context);
+        topScrim.setBackground(new GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{0x99000000, 0x00000000}));
+        FrameLayout.LayoutParams tsp = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT, Ui.dp(context, 96));
+        tsp.gravity = Gravity.TOP;
+        topScrim.setLayoutParams(tsp);
+
+        View bottomScrim = new View(context);
+        bottomScrim.setBackground(new GradientDrawable(
+                GradientDrawable.Orientation.BOTTOM_TOP,
+                new int[]{0xB3000000, 0x00000000}));
+        FrameLayout.LayoutParams bsp = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT, Ui.dp(context, 150));
+        bsp.gravity = Gravity.BOTTOM;
+        bottomScrim.setLayoutParams(bsp);
+
         status = new TextView(context);
-        status.setTextColor(Color.WHITE);
-        status.setTextSize(13f);
-        status.setShadowLayer(4f, 0f, 0f, Color.BLACK);
+        status.setTextColor(Ui.TEXT_MUTED);
+        status.setTypeface(Ui.medium(context));
+        status.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        status.setShadowLayer(6f, 0f, 1f, Color.BLACK);
         FrameLayout.LayoutParams sp = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.WRAP_CONTENT,
                 FrameLayout.LayoutParams.WRAP_CONTENT);
         sp.gravity = Gravity.BOTTOM | Gravity.START;
-        sp.leftMargin = 28;
-        sp.bottomMargin = 28;
+        sp.leftMargin = margin;
+        sp.bottomMargin = margin;
         status.setLayoutParams(sp);
 
         // Lower-right: photo date (and location when available).
         info = new TextView(context);
-        info.setTextColor(Color.WHITE);
-        info.setTextSize(19f);
-        info.setShadowLayer(5f, 0f, 1f, Color.BLACK);
+        info.setTextColor(0xFFF0F0F0);
+        info.setTypeface(Ui.medium(context));
+        info.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18);
+        info.setShadowLayer(8f, 0f, 1f, Color.BLACK);
         FrameLayout.LayoutParams ip = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.WRAP_CONTENT,
                 FrameLayout.LayoutParams.WRAP_CONTENT);
         ip.gravity = Gravity.BOTTOM | Gravity.END;
-        ip.rightMargin = 28;
-        ip.bottomMargin = 28;
+        ip.rightMargin = margin;
+        ip.bottomMargin = margin;
         info.setLayoutParams(ip);
 
         root.addView(back);
         root.addView(front);
+        root.addView(topScrim);
+        root.addView(bottomScrim);
         root.addView(status);
         root.addView(info);
         root.addView(buildTouchOverlay());

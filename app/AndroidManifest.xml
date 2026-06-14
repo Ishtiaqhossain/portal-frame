@@ -13,7 +13,7 @@
 
     <application
         android:label="Portal Frame"
-        android:icon="@drawable/ic_launcher"
+        android:icon="@mipmap/ic_launcher"
         android:allowBackup="false">
 
         <!-- Foreground / kiosk slideshow. Not a LAUNCHER entry: Portal's launcher
@@ -45,7 +45,7 @@
             android:name=".PhotosActivity"
             android:exported="true"
             android:label="Photos"
-            android:icon="@drawable/ic_launcher"
+            android:icon="@mipmap/ic_launcher"
             android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen"
             android:screenOrientation="landscape">
             <intent-filter>

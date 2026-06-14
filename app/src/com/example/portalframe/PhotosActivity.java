@@ -13,6 +13,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.text.InputType;
 import android.util.Log;
+import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
@@ -24,7 +25,6 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
-import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -39,19 +39,17 @@ import java.util.EnumMap;
 import java.util.Map;
 
 /**
- * On-device setup, shown as the "Photos" app icon. Two screens inside one Activity:
+ * On-device setup, shown as the "Photos" app icon. Styled with the Portal design
+ * system ({@link Ui}: dark theme, platform palette, Inter type, room-distance hit
+ * targets, centred max-width column, reserved top overlay inset). Three screens:
  *
- *  - Screen A (status/settings): shows the album currently playing (if any), how to
- *    get a Google Photos shared-album QR, and slideshow settings (seconds per photo,
- *    shuffle, transition speed). All persist to the same {@code portalframe} prefs the
- *    slideshow reads ({@link ConfigReceiver}).
- *  - Screen B (scanner): live camera QR scan. A Google Photos share link is validated
- *    and written to {@code KEY_ALBUM}; the slideshow picks it up on its next launch.
+ *  - Status/settings: album currently playing, how to add one, slideshow settings.
+ *  - Scanner: live camera QR scan (validated, written to {@code KEY_ALBUM}).
+ *  - Manual entry: type/paste the link with the on-screen keyboard (QR-less fallback).
  *
- * QR (not OCR) is used because the share link ends in a random, case-sensitive token.
- * The decoder is ZXing's pure-Java {@code core} (vendored in app/libs) — its QR
- * detector is rotation-invariant, so a plain {@code decode} handles a tilted code.
- * Uses the legacy {@link Camera} API for compactness on this fixed API-29 device.
+ * All persist to the same {@code portalframe} prefs the slideshow reads
+ * ({@link ConfigReceiver}). Uses the legacy {@link Camera} API for compactness on
+ * this fixed API-29 device.
  */
 @SuppressWarnings("deprecation")
 public class PhotosActivity extends Activity {
@@ -91,7 +89,7 @@ public class PhotosActivity extends Activity {
         super.onCreate(savedInstanceState);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         root = new FrameLayout(this);
-        root.setBackgroundColor(Color.BLACK);
+        root.setBackgroundColor(Ui.BG);
         setContentView(root);
         showStatus();
     }
@@ -124,55 +122,51 @@ public class PhotosActivity extends Activity {
         return prefs().getBoolean(ConfigReceiver.KEY_SHUFFLE, false);
     }
 
-    // ------------------------------------------------------- Screen A (status)
+    // ------------------------------------------------------- Status / settings
 
     private void showStatus() {
         stopCamera();
         stopArmed = false;
         root.removeAllViews();
-
-        ScrollView sv = new ScrollView(this);
-        LinearLayout col = new LinearLayout(this);
-        col.setOrientation(LinearLayout.VERTICAL);
-        int pad = dp(24);
-        col.setPadding(pad, pad, pad, pad);
-        sv.addView(col);
+        LinearLayout col = Ui.screen(this, root);
 
         final String url = album();
         final boolean hasAlbum = url != null && !url.isEmpty();
 
-        col.addView(title(hasAlbum ? "Your photos" : "Show your Google Photos"));
+        col.addView(Ui.title(this, hasAlbum ? "Your photos" : "Show your Google Photos"));
 
         if (hasAlbum) {
-            col.addView(body("Currently showing:"));
-            TextView u = body(url);
-            u.setTextColor(0xFF9AD0FF);
-            col.addView(u);
+            LinearLayout card = Ui.card(this);
+            card.addView(Ui.sectionLabel(this, "Now showing"));
+            TextView u = Ui.body(this, url);
+            u.setTextColor(Ui.BLUE);
+            u.setTypeface(Ui.medium(this));
+            LinearLayout.LayoutParams ulp = new LinearLayout.LayoutParams(MATCH, WRAP);
+            ulp.topMargin = Ui.dp(this, 6);
+            u.setLayoutParams(ulp);
+            card.addView(u);
+            col.addView(card);
         }
 
-        col.addView(body(
+        TextView howto = Ui.body(this,
                 "On your phone: open Google Photos, open the album you want, tap Share, and "
                         + "choose Create link / show its QR code. Then tap "
                         + (hasAlbum ? "Change album" : "Add album")
-                        + " below and hold your phone up to this screen.\n\n"
-                        + "Tip: the album must be shared by link so the frame can see it."));
+                        + " and hold your phone up to this screen.\n\n"
+                        + "Tip: the album must be shared by link so the frame can see it.");
+        topMargin(howto, 16);
+        col.addView(howto);
 
-        col.addView(button(hasAlbum ? "Change album" : "Add album", new Runnable() {
-            @Override
-            public void run() {
-                startScan();
-            }
+        col.addView(Ui.primary(this, hasAlbum ? "Change album" : "Add album", new Runnable() {
+            @Override public void run() { startScan(); }
         }));
 
-        col.addView(button("Enter link manually", new Runnable() {
-            @Override
-            public void run() {
-                showManualEntry();
-            }
+        col.addView(Ui.secondary(this, "Enter link manually", new Runnable() {
+            @Override public void run() { showManualEntry(); }
         }));
 
         if (hasAlbum) {
-            final Button stop = button("Stop showing photos", null);
+            final Button stop = Ui.destructive(this, "Stop showing photos", null);
             stop.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
@@ -189,9 +183,11 @@ public class PhotosActivity extends Activity {
             col.addView(stop);
         }
 
-        col.addView(sectionLabel("Slideshow"));
+        TextView section = Ui.sectionLabel(this, "Slideshow");
+        topMargin(section, 32);
+        col.addView(section);
 
-        final Button delayBtn = button("Seconds per photo:  " + fmtDelay(getDelay()), null);
+        final Button delayBtn = Ui.secondary(this, delayLabel(), null);
         delayBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -202,8 +198,7 @@ public class PhotosActivity extends Activity {
         });
         col.addView(delayBtn);
 
-        final Button shuffleBtn =
-                button("Shuffle photos:  " + (getShuffle() ? "On" : "Off"), null);
+        final Button shuffleBtn = Ui.secondary(this, shuffleLabel(), null);
         shuffleBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -214,7 +209,7 @@ public class PhotosActivity extends Activity {
         });
         col.addView(shuffleBtn);
 
-        final Button fadeBtn = button("Transition:  " + fadeLabel(getFade()), null);
+        final Button fadeBtn = Ui.secondary(this, fadeBtnLabel(), null);
         fadeBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -225,16 +220,24 @@ public class PhotosActivity extends Activity {
         });
         col.addView(fadeBtn);
 
-        col.addView(body("These change how the slideshow plays."));
+        Button done = Ui.secondary(this, "Done", new Runnable() {
+            @Override public void run() { finish(); }
+        });
+        topMargin(done, 32);
+        col.addView(done);
+    }
 
-        col.addView(button("Done", new Runnable() {
-            @Override
-            public void run() {
-                finish();
-            }
-        }));
+    private String delayLabel()   { return "Seconds per photo:  " + fmtDelay(getDelay()); }
+    private String shuffleLabel() { return "Shuffle photos:  " + (getShuffle() ? "On" : "Off"); }
+    private String fadeBtnLabel() { return "Transition:  " + fadeLabel(getFade()); }
 
-        root.addView(sv);
+    private void topMargin(View v, int dp) {
+        LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) v.getLayoutParams();
+        if (lp == null) {
+            lp = new LinearLayout.LayoutParams(MATCH, WRAP);
+        }
+        lp.topMargin = Ui.dp(this, dp);
+        v.setLayoutParams(lp);
     }
 
     private static long cycle(long[] choices, long cur, int fallback) {
@@ -260,39 +263,32 @@ public class PhotosActivity extends Activity {
         return s >= 60 ? (s / 60) + "m" : s + "s";
     }
 
-    // ------------------------------------------------ Screen C (manual entry)
+    // ------------------------------------------------ Manual entry
 
     /** Type/paste the album link using the on-screen keyboard (QR-less fallback). */
     private void showManualEntry() {
         stopCamera();
         stopArmed = false;
         root.removeAllViews();
+        LinearLayout col = Ui.screen(this, root);
 
-        ScrollView sv = new ScrollView(this);
-        LinearLayout col = new LinearLayout(this);
-        col.setOrientation(LinearLayout.VERTICAL);
-        int pad = dp(24);
-        col.setPadding(pad, pad, pad, pad);
-        sv.addView(col);
+        col.addView(Ui.title(this, "Enter album link"));
+        TextView help = Ui.body(this,
+                "Paste or type the Google Photos shared-album link (it starts with "
+                        + "https://photos.app.goo.gl/ or https://photos.google.com/share/).");
+        topMargin(help, 12);
+        col.addView(help);
 
-        col.addView(title("Enter album link"));
-        col.addView(body("Paste or type the Google Photos shared-album link (it starts with "
-                + "https://photos.app.goo.gl/ or https://photos.google.com/share/)."));
-
-        final EditText edit = new EditText(this);
+        final EditText edit = Ui.field(this, "https://photos.app.goo.gl/…");
         edit.setSingleLine(true);
         edit.setInputType(InputType.TYPE_CLASS_TEXT
                 | InputType.TYPE_TEXT_VARIATION_URI
                 | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
-        edit.setHint("https://photos.app.goo.gl/…");
         edit.setText(album());
         edit.setSelection(edit.getText().length());
-        LinearLayout.LayoutParams ep = new LinearLayout.LayoutParams(MATCH, WRAP);
-        ep.topMargin = dp(8);
-        edit.setLayoutParams(ep);
         col.addView(edit);
 
-        col.addView(button("Save", new Runnable() {
+        col.addView(Ui.primary(this, "Save", new Runnable() {
             @Override
             public void run() {
                 String url = edit.getText().toString().trim();
@@ -307,15 +303,13 @@ public class PhotosActivity extends Activity {
                 showStatus();
             }
         }));
-        col.addView(button("Cancel", new Runnable() {
+        col.addView(Ui.secondary(this, "Cancel", new Runnable() {
             @Override
             public void run() {
                 hideKeyboard(edit);
                 showStatus();
             }
         }));
-
-        root.addView(sv);
 
         // Pop the on-screen keyboard for the field.
         edit.requestFocus();
@@ -339,7 +333,7 @@ public class PhotosActivity extends Activity {
         }
     }
 
-    // ------------------------------------------------------ Screen B (scanner)
+    // ------------------------------------------------------ Scanner
 
     private void startScan() {
         if (checkSelfPermission(android.Manifest.permission.CAMERA)
@@ -367,57 +361,51 @@ public class PhotosActivity extends Activity {
         root.removeAllViews();
 
         FrameLayout f = new FrameLayout(this);
+        f.setBackgroundColor(Color.BLACK);
 
         surface = new SurfaceView(this);
         f.addView(surface, new FrameLayout.LayoutParams(MATCH, MATCH));
 
-        // Centered target box so the user knows where to aim the QR.
+        // Centred target box (Portal blue) so the user knows where to aim the QR.
         View box = new View(this);
-        GradientDrawable border = new GradientDrawable();
-        border.setColor(Color.TRANSPARENT);
-        border.setStroke(dp(3), 0xFFFFFFFF);
-        border.setCornerRadius(dp(12));
+        GradientDrawable border = Ui.roundRect(0x00000000, Ui.dp(this, 20));
+        border.setStroke(Ui.dp(this, 4), Ui.BLUE);
         box.setBackground(border);
-        int boxSize = dp(320);
+        int boxSize = Ui.dp(this, 340);
         FrameLayout.LayoutParams bp = new FrameLayout.LayoutParams(boxSize, boxSize);
         bp.gravity = Gravity.CENTER;
         f.addView(box, bp);
 
         scanHint = new TextView(this);
-        scanHint.setText("Make the QR fill your phone screen at full brightness. Hold the phone "
-                + "about half a meter away — far enough to look sharp, close enough to fill the "
-                + "white box. Hold steady.");
-        scanHint.setTextColor(Color.WHITE);
-        scanHint.setTextSize(16f);
+        scanHint.setText("Make the QR fill your phone screen at full brightness, then hold it "
+                + "about half a meter away — sharp and filling the blue box. Hold steady.");
+        scanHint.setTextColor(0xFFF0F0F0);
+        scanHint.setTypeface(Ui.medium(this));
+        scanHint.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18);
         scanHint.setGravity(Gravity.CENTER_HORIZONTAL);
-        scanHint.setShadowLayer(6f, 0f, 1f, Color.BLACK);
-        FrameLayout.LayoutParams hp = new FrameLayout.LayoutParams(dp(560), WRAP);
+        scanHint.setLineSpacing(Ui.dp(this, 4), 1f);
+        scanHint.setShadowLayer(8f, 0f, 1f, Color.BLACK);
+        FrameLayout.LayoutParams hp = new FrameLayout.LayoutParams(Ui.dp(this, 620), WRAP);
         hp.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
-        hp.topMargin = dp(20);
+        hp.topMargin = Ui.dp(this, 72); // clear the top system overlay
         f.addView(scanHint, hp);
 
-        Button typeLink = button("Can't scan? Type the link", new Runnable() {
-            @Override
-            public void run() {
-                showManualEntry();
-            }
+        Button typeLink = Ui.secondary(this, "Can't scan? Type the link", new Runnable() {
+            @Override public void run() { showManualEntry(); }
         });
         FrameLayout.LayoutParams tp = new FrameLayout.LayoutParams(WRAP, WRAP);
         tp.gravity = Gravity.BOTTOM | Gravity.START;
-        tp.bottomMargin = dp(24);
-        tp.leftMargin = dp(24);
+        tp.bottomMargin = Ui.dp(this, 28);
+        tp.leftMargin = Ui.dp(this, 28);
         f.addView(typeLink, tp);
 
-        Button cancel = button("Cancel", new Runnable() {
-            @Override
-            public void run() {
-                showStatus();
-            }
+        Button cancel = Ui.secondary(this, "Cancel", new Runnable() {
+            @Override public void run() { showStatus(); }
         });
         FrameLayout.LayoutParams cp = new FrameLayout.LayoutParams(WRAP, WRAP);
         cp.gravity = Gravity.BOTTOM | Gravity.END;
-        cp.bottomMargin = dp(24);
-        cp.rightMargin = dp(24);
+        cp.bottomMargin = Ui.dp(this, 28);
+        cp.rightMargin = Ui.dp(this, 28);
         f.addView(cancel, cp);
 
         root.addView(f);
@@ -614,58 +602,6 @@ public class PhotosActivity extends Activity {
             }
             camera = null;
         }
-    }
-
-    // ----------------------------------------------------------------- view helpers
-
-    private int dp(int v) {
-        return Math.round(getResources().getDisplayMetrics().density * v);
-    }
-
-    private TextView title(String t) {
-        TextView tv = new TextView(this);
-        tv.setText(t);
-        tv.setTextColor(Color.WHITE);
-        tv.setTextSize(26f);
-        tv.setPadding(0, 0, 0, dp(12));
-        return tv;
-    }
-
-    private TextView sectionLabel(String t) {
-        TextView tv = new TextView(this);
-        tv.setText(t);
-        tv.setTextColor(0xFFBBBBBB);
-        tv.setTextSize(15f);
-        tv.setPadding(0, dp(16), 0, dp(4));
-        return tv;
-    }
-
-    private TextView body(String t) {
-        TextView tv = new TextView(this);
-        tv.setText(t);
-        tv.setTextColor(Color.WHITE);
-        tv.setTextSize(16f);
-        tv.setPadding(0, dp(4), 0, dp(4));
-        return tv;
-    }
-
-    private Button button(String t, final Runnable onClick) {
-        Button b = new Button(this);
-        b.setText(t);
-        b.setAllCaps(false);
-        b.setTextSize(18f);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(MATCH, WRAP);
-        lp.topMargin = dp(10);
-        b.setLayoutParams(lp);
-        if (onClick != null) {
-            b.setOnClickListener(new View.OnClickListener() {
-                @Override
-                public void onClick(View v) {
-                    onClick.run();
-                }
-            });
-        }
-        return b;
     }
 
     private void toast(String m) {

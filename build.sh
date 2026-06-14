@@ -28,7 +28,7 @@ python3 "$ROOT/tools/gen_slides.py" "$APP/assets/slides" >/dev/null
 ls "$APP/assets/slides"
 
 echo "==> Generate launcher icon"
-python3 "$ROOT/tools/gen_icon.py" "$APP/res/drawable-nodpi" >/dev/null
+python3 "$ROOT/tools/gen_icon.py" "$APP/res/mipmap-xxxhdpi" >/dev/null
 
 echo "==> aapt2 compile resources (res/ -> res.zip)"
 "$AAPT2" compile --dir "$APP/res" -o "$BUILD/res.zip"
