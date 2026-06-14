@@ -41,11 +41,18 @@ internal object ApplePhotosSource : PhotoProvider {
     override fun fetch(url: String): Album {
         val token = extractToken(url) ?: throw IOException("no iCloud album token in URL")
         var base = "https://p01-sharedstreams.icloud.com/$token/sharedstreams/"
-        // Apple 330-redirects to the partition this album actually lives on.
+        // Apple 330-redirects to the partition this album actually lives on; the target host
+        // comes back in the X-Apple-MMe-Host header (and sometimes also in the JSON body).
         for (attempt in 0 until 3) {
-            val (code, body) = post(base + "webstream", "{\"streamCtag\":null}")
+            val (code, body, mmeHost) = post(base + "webstream", "{\"streamCtag\":null}")
             if (code == 330) {
-                val host = JSONObject(body).optString("X-Apple-MMe-Host", "")
+                val host = mmeHost.ifEmpty {
+                    try {
+                        JSONObject(body).optString("X-Apple-MMe-Host", "")
+                    } catch (e: Exception) {
+                        ""
+                    }
+                }
                 if (host.isEmpty()) throw IOException("iCloud redirect missing host")
                 base = "https://$host/$token/sharedstreams/"
                 continue
@@ -115,7 +122,7 @@ internal object ApplePhotosSource : PhotoProvider {
 
     private fun resolveUrls(base: String, guids: List<String>, out: MutableMap<String, String>) {
         val body = JSONObject().put("photoGuids", JSONArray(guids)).toString()
-        val (code, resp) = post(base + "webasseturls", body)
+        val (code, resp, _) = post(base + "webasseturls", body)
         if (code != 200) throw IOException("iCloud webasseturls http $code")
         val j = JSONObject(resp)
         val items = j.optJSONObject("items") ?: return
@@ -160,7 +167,8 @@ internal object ApplePhotosSource : PhotoProvider {
         }
     }
 
-    private fun post(urlStr: String, body: String): Pair<Int, String> {
+    /** POST [body] as JSON; returns (status, responseBody, X-Apple-MMe-Host header or ""). */
+    private fun post(urlStr: String, body: String): Triple<Int, String, String> {
         if (!urlStr.startsWith("https://")) throw IOException("refusing non-HTTPS iCloud URL")
         var c: HttpURLConnection? = null
         try {
@@ -175,10 +183,11 @@ internal object ApplePhotosSource : PhotoProvider {
             c.setRequestProperty("Origin", "https://www.icloud.com")
             c.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
             val code = c.responseCode
+            val mmeHost = c.getHeaderField("X-Apple-MMe-Host") ?: ""
             val stream = if (code in 200..299) c.inputStream else c.errorStream
             val text = stream?.let { readCapped(it) } ?: ""
             Log.i(TAG, "iCloud http $code -> $urlStr")
-            return code to text
+            return Triple(code, text, mmeHost)
         } finally {
             c?.disconnect()
         }
