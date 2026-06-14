@@ -49,6 +49,7 @@ final class Ui {
 
     static final int TOP_INSET_DP = 72;  // reserve for Portal's top system overlay
     static final int MAX_W_DP = 760;     // centred content column
+    static final int MAX_W_WIDE_DP = 1160; // wide two-column layouts
 
     // ---- Inter typefaces (bundled in assets; graceful fallback) ----
     private static Typeface sRegular, sMedium, sBold;
@@ -199,6 +200,10 @@ final class Ui {
      * margins. Returns the column to add content to.
      */
     static LinearLayout screen(Activity a, FrameLayout root) {
+        return screen(a, root, MAX_W_DP);
+    }
+
+    static LinearLayout screen(Activity a, FrameLayout root, int maxWdp) {
         root.setBackgroundColor(BG);
         ScrollView sv = new ScrollView(a);
         sv.setFillViewport(true);
@@ -211,7 +216,7 @@ final class Ui {
         col.setPadding(side, dp(a, TOP_INSET_DP), side, dp(a, 40));
 
         FrameLayout.LayoutParams clp = new FrameLayout.LayoutParams(
-                Math.min(dp(a, MAX_W_DP),
+                Math.min(dp(a, maxWdp),
                         a.getResources().getDisplayMetrics().widthPixels),
                 ViewGroup.LayoutParams.WRAP_CONTENT);
         clp.gravity = Gravity.CENTER_HORIZONTAL;
@@ -220,6 +225,93 @@ final class Ui {
         sv.addView(col);
         root.addView(sv);
         return col;
+    }
+
+    /**
+     * Split {@code parent} into two equal-weight vertical columns with a gap, for
+     * side-by-side panes. Returns {left, right}; add cards to either.
+     */
+    static LinearLayout[] twoColumns(Context c, LinearLayout parent) {
+        LinearLayout row = new LinearLayout(c);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        rlp.topMargin = dp(c, 8);
+        row.setLayoutParams(rlp);
+
+        LinearLayout left = new LinearLayout(c);
+        left.setOrientation(LinearLayout.VERTICAL);
+        left.setLayoutParams(new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        LinearLayout right = new LinearLayout(c);
+        right.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        rp.leftMargin = dp(c, 24);
+        right.setLayoutParams(rp);
+
+        row.addView(left);
+        row.addView(right);
+        parent.addView(row);
+        return new LinearLayout[]{left, right};
+    }
+
+    /**
+     * A settings row inside a {@link #card}: label (left) → value (blue) + chevron,
+     * full-width, pressable. The value TextView is stored as the row's tag so it can
+     * be updated in place via {@link #setRowValue}.
+     */
+    static View row(Context c, String label, String value, final Runnable onClick) {
+        LinearLayout r = new LinearLayout(c);
+        r.setOrientation(LinearLayout.HORIZONTAL);
+        r.setGravity(Gravity.CENTER_VERTICAL);
+        r.setMinimumHeight(dp(c, 64));
+        r.setPadding(dp(c, 4), dp(c, 8), dp(c, 4), dp(c, 8));
+        r.setClickable(true);
+        r.setBackground(pressable(
+                roundRect(SURFACE_PRESSED, dp(c, 12)), roundRect(0x00000000, dp(c, 12))));
+        r.setLayoutParams(new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        TextView lab = text(c, label, 18, medium(c), TEXT);
+        lab.setLayoutParams(new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        r.addView(lab);
+
+        TextView val = text(c, value, 18, medium(c), BLUE);
+        r.addView(val);
+
+        TextView chev = text(c, "  ›", 18, medium(c), TEXT_MUTED);
+        r.addView(chev);
+
+        r.setTag(val);
+        if (onClick != null) {
+            r.setOnClickListener(new View.OnClickListener() {
+                @Override public void onClick(View v) { onClick.run(); }
+            });
+        }
+        return r;
+    }
+
+    /** Update the value shown by a {@link #row} in place. */
+    static void setRowValue(View row, String value) {
+        Object tag = row.getTag();
+        if (tag instanceof TextView) {
+            ((TextView) tag).setText(value);
+        }
+    }
+
+    /** A thin divider between rows inside a card. */
+    static View hairline(Context c) {
+        View v = new View(c);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, Math.max(1, dp(c, 1)));
+        lp.topMargin = dp(c, 4);
+        lp.bottomMargin = dp(c, 4);
+        v.setLayoutParams(lp);
+        v.setBackgroundColor(HAIRLINE);
+        return v;
     }
 
     // ---- drawable helpers ----

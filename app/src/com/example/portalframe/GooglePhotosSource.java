@@ -111,7 +111,9 @@ public class GooglePhotosSource {
             if (!seen.add(base)) {
                 continue;
             }
-            out.add(new Slide(base + "=w" + IMG_WIDTH, caption(item)));
+            long tms = captureMillis(item);
+            String cap = tms != Slide.NO_DATE ? formatDate(tms) : null;
+            out.add(new Slide(base + "=w" + IMG_WIDTH, cap, tms));
         }
         if (videos > 0) {
             Log.i(TAG, "skipped " + videos + " video(s)");
@@ -140,20 +142,29 @@ public class GooglePhotosSource {
         return !hasFilesize && !hasExif;
     }
 
-    /** Caption from the item's capture timestamp (location data isn't present). */
-    private static String caption(String item) {
+    /**
+     * Capture instant in epoch millis, shifted by the photo's timezone offset so
+     * the value reads as the local wall clock when formatted in UTC. Returns
+     * {@link Slide#NO_DATE} when the item carries no timestamp.
+     */
+    private static long captureMillis(String item) {
         Matcher dm = DATE.matcher(item);
         if (dm.find()) {
             try {
                 long t = Long.parseLong(dm.group(1));
                 long tz = Long.parseLong(dm.group(2));
-                SimpleDateFormat f = new SimpleDateFormat("MMM d, yyyy", Locale.US);
-                f.setTimeZone(TimeZone.getTimeZone("UTC"));
-                return f.format(new Date(t + tz));
+                return t + tz;
             } catch (NumberFormatException ignored) {
             }
         }
-        return null;
+        return Slide.NO_DATE;
+    }
+
+    /** Human caption from a capture instant (location data isn't present). */
+    private static String formatDate(long ms) {
+        SimpleDateFormat f = new SimpleDateFormat("MMM d, yyyy", Locale.US);
+        f.setTimeZone(TimeZone.getTimeZone("UTC"));
+        return f.format(new Date(ms));
     }
 
     private static String httpGet(String urlStr) throws Exception {

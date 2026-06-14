@@ -17,6 +17,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.List;
 
 /**
@@ -33,6 +34,7 @@ public class MainActivity extends Activity {
 
     private static final String TAG = "PortalFrame";
     private static final long REFRESH_INTERVAL_MS = 20 * 60 * 1000L; // 20 min
+    private static final long DIM_INTERVAL_MS = 5 * 60 * 1000L;       // re-check brightness
 
     private ImageLoader loader;
     private SlideshowController controller;
@@ -91,6 +93,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        startDimming(); // ease screen brightness down at night, up in the morning
         SharedPreferences prefs = getSharedPreferences(ConfigReceiver.PREFS, MODE_PRIVATE);
         albumUrl = prefs.getString(ConfigReceiver.KEY_ALBUM, "");
 
@@ -122,7 +125,56 @@ public class MainActivity extends Activity {
     protected void onPause() {
         super.onPause();
         handler.removeCallbacks(refreshTick);
+        handler.removeCallbacks(dimTick);
         controller.stop();
+    }
+
+    // --- night dimming -------------------------------------------------------
+
+    private final Runnable dimTick = new Runnable() {
+        @Override
+        public void run() {
+            applyBrightness();
+            handler.postDelayed(this, DIM_INTERVAL_MS);
+        }
+    };
+
+    private void startDimming() {
+        handler.removeCallbacks(dimTick);
+        applyBrightness();
+        handler.postDelayed(dimTick, DIM_INTERVAL_MS);
+    }
+
+    /** Set this window's brightness from the time of day (doesn't touch system settings). */
+    private void applyBrightness() {
+        Calendar c = Calendar.getInstance();
+        float h = c.get(Calendar.HOUR_OF_DAY) + c.get(Calendar.MINUTE) / 60f;
+        WindowManager.LayoutParams lp = getWindow().getAttributes();
+        lp.screenBrightness = brightnessForHour(h);
+        getWindow().setAttributes(lp);
+    }
+
+    /**
+     * Full brightness through the day, eased down to a soft glow overnight so the
+     * frame isn't a lighthouse in a dark room. Ramps 21:00→23:00 down and
+     * 06:00→08:00 up; deep night 23:00→06:00.
+     */
+    private static float brightnessForHour(float h) {
+        final float DAY = 1.0f, NIGHT = 0.07f;
+        if (h >= 8f && h < 21f) {
+            return DAY;
+        }
+        if (h >= 21f && h < 23f) {
+            return lerp(DAY, NIGHT, (h - 21f) / 2f);
+        }
+        if (h >= 23f || h < 6f) {
+            return NIGHT;
+        }
+        return lerp(NIGHT, DAY, (h - 6f) / 2f); // 06:00–08:00
+    }
+
+    private static float lerp(float a, float b, float t) {
+        return a + (b - a) * t;
     }
 
     private final Runnable refreshTick = new Runnable() {
@@ -204,6 +256,7 @@ public class MainActivity extends Activity {
             try {
                 o.put("u", s.id);
                 o.put("c", s.caption == null ? "" : s.caption);
+                o.put("t", s.timeMs);
             } catch (JSONException ignored) {
                 continue;
             }
@@ -232,8 +285,9 @@ public class MainActivity extends Activity {
                 JSONObject o = arr.getJSONObject(i);
                 String id = o.optString("u", "");
                 String caption = o.optString("c", "");
+                long t = o.optLong("t", Slide.NO_DATE);
                 if (!id.isEmpty()) {
-                    out.add(new Slide(id, caption.isEmpty() ? null : caption));
+                    out.add(new Slide(id, caption.isEmpty() ? null : caption, t));
                 }
             }
         } catch (JSONException e) {

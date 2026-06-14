@@ -1,10 +1,15 @@
 package com.example.portalframe;
 
+import android.animation.ValueAnimator;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.res.AssetManager;
 import android.graphics.Bitmap;
+import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.LinearGradient;
+import android.graphics.Paint;
+import android.graphics.Shader;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Handler;
 import android.os.Looper;
@@ -14,13 +19,22 @@ import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.animation.LinearInterpolator;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.Comparator;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.LinkedList;
 import java.util.List;
+import java.util.Set;
+import java.util.TimeZone;
 
 /**
  * Crossfading slideshow. Items are image IDs — either bundled asset paths
@@ -43,6 +57,7 @@ public class SlideshowController {
     private static final float TAP_SLOP = 30f;
     private static final long TAP_TIMEOUT_MS = 350;
     private static final long LONG_PRESS_MS = 700; // hold to open Photos setup
+    private static final long WEATHER_INTERVAL_MS = 30 * 60 * 1000L; // refresh weather
 
     private final Context context;
     private final ImageLoader loader;
@@ -50,9 +65,24 @@ public class SlideshowController {
     private final ImageView front;
     private final TextView status;
     private final TextView info;
+    private final TextView clock;
+    private final TextView dateLine;
+    private final ShimmerView shimmer;
+    private final java.text.DateFormat timeFmt;
+    private final java.text.SimpleDateFormat dateFmt =
+            new java.text.SimpleDateFormat("EEE, MMM d", java.util.Locale.getDefault());
+    private final boolean fahrenheit =
+            "US".equals(java.util.Locale.getDefault().getCountry());
+    private String weatherText = ""; // e.g. "☀️ 72°" once loaded
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final int reqW;
     private final int reqH;
+
+    // Smart-shuffle memory: ids shown recently (most-recent first) so a reshuffle
+    // doesn't immediately replay them, and the last id to avoid a back-to-back repeat.
+    private final LinkedList<String> recentIds = new LinkedList<>();
+    private String lastShownId;
+    private boolean shimmerHidden;
 
     // User-tunable settings (read from prefs in the constructor; see PhotosActivity).
     private final long intervalMs;  // time each slide is held
@@ -109,6 +139,7 @@ public class SlideshowController {
         bsp.gravity = Gravity.BOTTOM;
         bottomScrim.setLayoutParams(bsp);
 
+        // Loading / error hint — moved to the top so it doesn't fight the clock.
         status = new TextView(context);
         status.setTextColor(Ui.TEXT_MUTED);
         status.setTypeface(Ui.medium(context));
@@ -117,9 +148,9 @@ public class SlideshowController {
         FrameLayout.LayoutParams sp = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.WRAP_CONTENT,
                 FrameLayout.LayoutParams.WRAP_CONTENT);
-        sp.gravity = Gravity.BOTTOM | Gravity.START;
+        sp.gravity = Gravity.TOP | Gravity.START;
         sp.leftMargin = margin;
-        sp.bottomMargin = margin;
+        sp.topMargin = Ui.dp(context, 24);
         status.setLayoutParams(sp);
 
         // Lower-right: photo date (and location when available).
@@ -136,13 +167,55 @@ public class SlideshowController {
         ip.bottomMargin = margin;
         info.setLayoutParams(ip);
 
+        // Bottom-left: a large clock with a "day, date · weather" line beneath it
+        // (Nest/Portal photo-frame style). Time uses a clean, AM/PM-free format.
+        this.timeFmt = new java.text.SimpleDateFormat(
+                android.text.format.DateFormat.is24HourFormat(context) ? "H:mm" : "h:mm",
+                java.util.Locale.getDefault());
+        clock = new TextView(context);
+        clock.setTextColor(Color.WHITE);
+        clock.setTypeface(Ui.regular(context));
+        clock.setTextSize(TypedValue.COMPLEX_UNIT_SP, 52);
+        clock.setShadowLayer(12f, 0f, 2f, Color.BLACK);
+        clock.setIncludeFontPadding(false);
+        dateLine = new TextView(context);
+        dateLine.setTextColor(0xFFF0F0F0);
+        dateLine.setTypeface(Ui.medium(context));
+        dateLine.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17);
+        dateLine.setShadowLayer(8f, 0f, 1f, Color.BLACK);
+        LinearLayout clockBox = new LinearLayout(context);
+        clockBox.setOrientation(LinearLayout.VERTICAL);
+        clockBox.addView(clock);
+        clockBox.addView(dateLine);
+        FrameLayout.LayoutParams cbp = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT);
+        cbp.gravity = Gravity.BOTTOM | Gravity.START;
+        cbp.leftMargin = margin;
+        cbp.bottomMargin = margin;
+        clockBox.setLayoutParams(cbp);
+
+        // Shimmer over the dark first frame so it never looks "stuck" while loading.
+        shimmer = new ShimmerView(context);
+        shimmer.setLayoutParams(new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT));
+
         root.addView(back);
         root.addView(front);
+        root.addView(shimmer);
         root.addView(topScrim);
         root.addView(bottomScrim);
         root.addView(status);
         root.addView(info);
+        root.addView(clockBox);
         root.addView(buildTouchOverlay());
+
+        // Run clock + weather + shimmer from the start so they're alive even during
+        // the initial "Loading…" wait before the first photo arrives.
+        startClock();
+        startWeather();
+        shimmer.startSweep();
     }
 
     public void setOnDismiss(Runnable onDismiss) {
@@ -262,13 +335,19 @@ public class SlideshowController {
 
     public void start() {
         running = true;
+        startClock();
+        startWeather();
+        if (!shimmerHidden) {
+            shimmer.startSweep();
+        }
         if (items.isEmpty()) {
             items = assetItems();
             remote = false;
             if (shuffle) {
-                java.util.Collections.shuffle(items);
+                smartShuffle(items);
             }
         }
+        promoteOnThisDay(items); // no-op for bundled samples (no dates)
         if (items.isEmpty()) {
             status.setText("No slides found in assets/" + SLIDES_DIR);
             back.setBackgroundColor(Color.DKGRAY);
@@ -283,6 +362,9 @@ public class SlideshowController {
     public void stop() {
         running = false;
         handler.removeCallbacks(autoTick);
+        handler.removeCallbacks(clockTick);
+        handler.removeCallbacks(weatherTick);
+        shimmer.stopSweep();
         front.animate().cancel();
     }
 
@@ -293,10 +375,16 @@ public class SlideshowController {
         }
         items = new ArrayList<>(newItems);
         if (shuffle) {
-            java.util.Collections.shuffle(items);
+            smartShuffle(items);
         }
+        promoteOnThisDay(items);
         remote = true;
         handler.removeCallbacks(autoTick);
+        startClock();
+        startWeather();
+        if (!shimmerHidden) {
+            shimmer.startSweep();
+        }
         front.animate().cancel();
         front.setAlpha(0f);
         index = 0;
@@ -327,9 +415,21 @@ public class SlideshowController {
     private final Runnable autoTick = new Runnable() {
         @Override
         public void run() {
-            if (running && !items.isEmpty()) {
-                transitionTo((index + 1) % items.size(), autoFadeMs);
+            if (!running || items.isEmpty()) {
+                return;
             }
+            int next;
+            if (index + 1 >= items.size()) {
+                // Wrapped a full loop: reshuffle so the next loop differs and
+                // doesn't open with a photo we just showed.
+                if (shuffle && items.size() > 2) {
+                    smartShuffle(items);
+                }
+                next = 0;
+            } else {
+                next = index + 1;
+            }
+            transitionTo(next, autoFadeMs);
         }
     };
 
@@ -349,6 +449,8 @@ public class SlideshowController {
                     index = i;
                     status.setText("");
                     info.setText(captionOf(i));
+                    noteShown(i);
+                    hideShimmer();
                 }
                 prefetchNext(i);
                 scheduleAuto();
@@ -380,6 +482,8 @@ public class SlideshowController {
                 index = next;
                 status.setText("");
                 info.setText(captionOf(next));
+                noteShown(next);
+                hideShimmer();
                 front.animate().alpha(1f).setDuration(fadeMs).withEndAction(new Runnable() {
                     @Override
                     public void run() {
@@ -405,6 +509,226 @@ public class SlideshowController {
     private String captionOf(int i) {
         String cap = items.get(i).caption;
         return cap == null ? "" : cap;
+    }
+
+    // ---------------------------------------------------------------- smart shuffle
+
+    /** Remember a shown id so a reshuffle de-weights it (most-recent first). */
+    private void noteShown(int i) {
+        if (items.isEmpty()) {
+            return;
+        }
+        String id = items.get(i).id;
+        lastShownId = id;
+        recentIds.remove(id);
+        recentIds.addFirst(id);
+        int cap = Math.max(1, items.size() / 3);
+        while (recentIds.size() > cap) {
+            recentIds.removeLast();
+        }
+    }
+
+    /**
+     * Shuffle, then push recently shown photos toward the back (stable sort keeps
+     * the shuffled order within each group) and make sure we don't open with the
+     * photo just shown — so it never feels like "didn't I just see that?".
+     */
+    private void smartShuffle(List<Slide> list) {
+        java.util.Collections.shuffle(list);
+        if (recentIds.isEmpty() && lastShownId == null) {
+            return;
+        }
+        final Set<String> recent = new HashSet<>(recentIds);
+        java.util.Collections.sort(list, new Comparator<Slide>() {
+            @Override
+            public int compare(Slide a, Slide b) {
+                return Integer.compare(recent.contains(a.id) ? 1 : 0,
+                        recent.contains(b.id) ? 1 : 0);
+            }
+        });
+        if (list.size() > 1 && lastShownId != null && list.get(0).id.equals(lastShownId)) {
+            int swap = 1;
+            for (int i = 1; i < list.size(); i++) {
+                if (!recent.contains(list.get(i).id)) {
+                    swap = i;
+                    break;
+                }
+            }
+            Slide tmp = list.get(0);
+            list.set(0, list.get(swap));
+            list.set(swap, tmp);
+        }
+    }
+
+    // ---------------------------------------------------------------- On this day
+
+    /**
+     * Move photos taken on today's month+day in a past year to the front (most
+     * recent memory first), re-captioned "N years ago today ✨". No-op for items
+     * without a capture date (bundled samples).
+     */
+    private void promoteOnThisDay(List<Slide> list) {
+        Calendar now = Calendar.getInstance();
+        int curMonth = now.get(Calendar.MONTH);
+        int curDay = now.get(Calendar.DAY_OF_MONTH);
+        int curYear = now.get(Calendar.YEAR);
+
+        // timeMs is the capture wall-clock expressed in UTC, so read it back in UTC.
+        Calendar c = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
+        List<Slide> memories = new ArrayList<>();
+        for (Iterator<Slide> it = list.iterator(); it.hasNext(); ) {
+            Slide s = it.next();
+            if (s.timeMs == Slide.NO_DATE) {
+                continue;
+            }
+            c.setTimeInMillis(s.timeMs);
+            if (c.get(Calendar.MONTH) != curMonth || c.get(Calendar.DAY_OF_MONTH) != curDay) {
+                continue;
+            }
+            int yearsAgo = curYear - c.get(Calendar.YEAR);
+            if (yearsAgo < 1) {
+                continue; // taken today this year, not a memory
+            }
+            String badge = yearsAgo == 1
+                    ? "1 year ago today ✨"
+                    : yearsAgo + " years ago today ✨";
+            memories.add(new Slide(s.id, badge, s.timeMs));
+            it.remove();
+        }
+        if (memories.isEmpty()) {
+            return;
+        }
+        java.util.Collections.sort(memories, new Comparator<Slide>() {
+            @Override
+            public int compare(Slide a, Slide b) {
+                return Long.compare(b.timeMs, a.timeMs); // most recent first
+            }
+        });
+        list.addAll(0, memories);
+        Log.i(TAG, "On this day: promoted " + memories.size() + " memory photo(s)");
+    }
+
+    // ---------------------------------------------------------------- clock + date
+
+    private final Runnable clockTick = new Runnable() {
+        @Override
+        public void run() {
+            updateClock();
+            handler.postDelayed(this, 60000 - (System.currentTimeMillis() % 60000));
+        }
+    };
+
+    private void startClock() {
+        handler.removeCallbacks(clockTick);
+        updateClock();
+        handler.postDelayed(clockTick, 60000 - (System.currentTimeMillis() % 60000));
+    }
+
+    private void updateClock() {
+        Calendar c = Calendar.getInstance();
+        clock.setText(timeFmt.format(c.getTime()));
+        String date = dateFmt.format(c.getTime());
+        dateLine.setText(weatherText.isEmpty() ? date : date + "   " + weatherText);
+    }
+
+    // ---------------------------------------------------------------- weather
+
+    private final Runnable weatherTick = new Runnable() {
+        @Override
+        public void run() {
+            refreshWeather();
+            handler.postDelayed(this, WEATHER_INTERVAL_MS);
+        }
+    };
+
+    private void startWeather() {
+        handler.removeCallbacks(weatherTick);
+        // Fetch immediately if we have nothing yet; otherwise keep the periodic cadence.
+        handler.postDelayed(weatherTick, weatherText.isEmpty() ? 0 : WEATHER_INTERVAL_MS);
+    }
+
+    private void refreshWeather() {
+        loader.executor().execute(new Runnable() {
+            @Override
+            public void run() {
+                final Weather.Now now = Weather.fetch(fahrenheit);
+                if (now == null) {
+                    return;
+                }
+                handler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        weatherText = now.label();
+                        updateClock();
+                    }
+                });
+            }
+        });
+    }
+
+    // ---------------------------------------------------------------- loading shimmer
+
+    private void hideShimmer() {
+        if (shimmerHidden) {
+            return;
+        }
+        shimmerHidden = true;
+        shimmer.animate().alpha(0f).setDuration(400).withEndAction(new Runnable() {
+            @Override
+            public void run() {
+                shimmer.stopSweep();
+                shimmer.setVisibility(View.GONE);
+            }
+        });
+    }
+
+    /** A soft diagonal light band sweeping across a dark surface — a calm "loading". */
+    private static final class ShimmerView extends View {
+        private final Paint paint = new Paint();
+        private final ValueAnimator anim;
+        private float pos = -0.3f; // sweep centre as a fraction of width
+
+        ShimmerView(Context c) {
+            super(c);
+            setBackgroundColor(0xFF1A1A1A);
+            anim = ValueAnimator.ofFloat(-0.3f, 1.3f);
+            anim.setDuration(1600);
+            anim.setRepeatCount(ValueAnimator.INFINITE);
+            anim.setInterpolator(new LinearInterpolator());
+            anim.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+                @Override
+                public void onAnimationUpdate(ValueAnimator a) {
+                    pos = (Float) a.getAnimatedValue();
+                    invalidate();
+                }
+            });
+        }
+
+        void startSweep() {
+            if (!anim.isStarted()) {
+                anim.start();
+            }
+        }
+
+        void stopSweep() {
+            anim.cancel();
+        }
+
+        @Override
+        protected void onDraw(Canvas canvas) {
+            super.onDraw(canvas);
+            int w = getWidth();
+            int h = getHeight();
+            if (w == 0 || h == 0) {
+                return;
+            }
+            float band = w * 0.35f;
+            float cx = pos * w;
+            paint.setShader(new LinearGradient(cx - band, 0, cx + band, 0,
+                    new int[]{0x00FFFFFF, 0x14FFFFFF, 0x00FFFFFF},
+                    new float[]{0f, 0.5f, 1f}, Shader.TileMode.CLAMP));
+            canvas.drawRect(0, 0, w, h, paint);
+        }
     }
 
     private List<Slide> assetItems() {
