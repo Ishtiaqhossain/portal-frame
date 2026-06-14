@@ -24,9 +24,31 @@ public class ConfigReceiver extends BroadcastReceiver {
     static final String KEY_SHUFFLE = "shuffle";     // boolean: random order
     static final String KEY_FADE_MS = "fade_ms";     // ms auto crossfade duration
     static final String KEY_PAIRS = "pairs";         // boolean: pair portraits side-by-side
+    static final String KEY_KEN_BURNS = "ken_burns"; // boolean: cinematic pan/zoom
+    static final String KEY_CLOCK = "clock";         // boolean: clock + weather overlay
+    static final String KEY_NIGHT = "night";         // boolean: warm night dimming
+    static final String KEY_ON_THIS_DAY = "on_this_day"; // boolean: surface memories
+    static final String KEY_CAPTIONS = "captions";   // boolean: photo date captions
+    static final String KEY_FACE = "face_framing";   // boolean: face-aware Ken Burns target
+    static final String KEY_AMBIENT = "ambient_color"; // boolean: per-photo color glow
     static final long DEFAULT_DELAY_MS = 6000L;
     static final long DEFAULT_FADE_MS = 1200L;
     static final boolean DEFAULT_PAIRS = true;
+    static final boolean DEFAULT_KEN_BURNS = true;
+    static final boolean DEFAULT_CLOCK = true;
+    static final boolean DEFAULT_NIGHT = true;
+    static final boolean DEFAULT_ON_THIS_DAY = true;
+    static final boolean DEFAULT_CAPTIONS = true;
+    static final boolean DEFAULT_FACE = true;
+    static final boolean DEFAULT_AMBIENT = true;
+
+    // ADB-settable boolean extras (extra name -> pref key) for quick testing, e.g.
+    //   adb shell am broadcast -n com.example.portalframe/.ConfigReceiver --ez ken_burns false
+    private static final String[][] BOOL_EXTRAS = {
+            {"shuffle", KEY_SHUFFLE}, {"pairs", KEY_PAIRS}, {"ken_burns", KEY_KEN_BURNS},
+            {"clock", KEY_CLOCK}, {"night", KEY_NIGHT}, {"on_this_day", KEY_ON_THIS_DAY},
+            {"captions", KEY_CAPTIONS}, {"face_framing", KEY_FACE}, {"ambient_color", KEY_AMBIENT},
+    };
 
     // Cached photo list so the screensaver starts straight from the album (no
     // bundled-sample flash). KEY_PHOTO_CACHE_URL records which album it's for.
@@ -38,13 +60,29 @@ public class ConfigReceiver extends BroadcastReceiver {
 
     @Override
     public void onReceive(Context ctx, Intent intent) {
-        if (intent == null || !intent.hasExtra("url")) {
+        if (intent == null) {
             return;
         }
-        String url = intent.getStringExtra("url");
-        url = url == null ? "" : url.trim();
-        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                .edit().putString(KEY_ALBUM, url).apply();
-        Log.i("PortalFrame", "album_url set to: '" + url + "'");
+        android.content.SharedPreferences.Editor ed =
+                ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit();
+        boolean any = false;
+        if (intent.hasExtra("url")) {
+            String url = intent.getStringExtra("url");
+            url = url == null ? "" : url.trim();
+            ed.putString(KEY_ALBUM, url);
+            Log.i("PortalFrame", "album_url set to: '" + url + "'");
+            any = true;
+        }
+        for (String[] e : BOOL_EXTRAS) {
+            if (intent.hasExtra(e[0])) {
+                boolean val = intent.getBooleanExtra(e[0], true);
+                ed.putBoolean(e[1], val);
+                Log.i("PortalFrame", e[1] + " set to: " + val);
+                any = true;
+            }
+        }
+        if (any) {
+            ed.apply();
+        }
     }
 }

@@ -76,6 +76,7 @@ public class SlideshowController {
     private final boolean fahrenheit =
             "US".equals(java.util.Locale.getDefault().getCountry());
     private final View nightTint;   // warm overlay that fades in at night (Ambient-EQ-lite)
+    private final View ambientGlow; // edge vignette tinted to the photo's mood color
     private Weather.Now weather; // current reading; null until loaded
     private final android.graphics.drawable.Drawable moonDrawable; // blue crescent, clear nights
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -93,6 +94,18 @@ public class SlideshowController {
     private final long autoFadeMs;  // auto crossfade duration
     private final boolean shuffle;  // play photos in random order
     private final boolean pairs;    // pair portrait photos side-by-side
+    private final boolean kenBurns; // cinematic slow pan + zoom while held
+    private final boolean showClock;// clock + weather overlay
+    private final boolean nightMode;// warm night dimming
+    private final boolean onThisDay;// surface "N years ago today" memories
+    private final boolean captions; // photo date captions (lower-right)
+    private final boolean faceFraming;  // bias Ken Burns toward detected faces
+    private final boolean ambientColor; // tint chrome to each photo's palette
+
+    // Ken Burns animation state.
+    private final java.util.Random rnd = new java.util.Random();
+    private ValueAnimator kbAnim;
+    private KenBurns kbPath;
 
     private List<Slide> items = new ArrayList<>();
     private boolean remote = false;
@@ -118,6 +131,13 @@ public class SlideshowController {
                 ConfigReceiver.KEY_FADE_MS, ConfigReceiver.DEFAULT_FADE_MS);
         this.shuffle = prefs.getBoolean(ConfigReceiver.KEY_SHUFFLE, false);
         this.pairs = prefs.getBoolean(ConfigReceiver.KEY_PAIRS, ConfigReceiver.DEFAULT_PAIRS);
+        this.kenBurns = prefs.getBoolean(ConfigReceiver.KEY_KEN_BURNS, ConfigReceiver.DEFAULT_KEN_BURNS);
+        this.showClock = prefs.getBoolean(ConfigReceiver.KEY_CLOCK, ConfigReceiver.DEFAULT_CLOCK);
+        this.nightMode = prefs.getBoolean(ConfigReceiver.KEY_NIGHT, ConfigReceiver.DEFAULT_NIGHT);
+        this.onThisDay = prefs.getBoolean(ConfigReceiver.KEY_ON_THIS_DAY, ConfigReceiver.DEFAULT_ON_THIS_DAY);
+        this.captions = prefs.getBoolean(ConfigReceiver.KEY_CAPTIONS, ConfigReceiver.DEFAULT_CAPTIONS);
+        this.faceFraming = prefs.getBoolean(ConfigReceiver.KEY_FACE, ConfigReceiver.DEFAULT_FACE);
+        this.ambientColor = prefs.getBoolean(ConfigReceiver.KEY_AMBIENT, ConfigReceiver.DEFAULT_AMBIENT);
         monthYearFmt.setTimeZone(TimeZone.getTimeZone("UTC"));
 
         root.setBackgroundColor(Color.BLACK);
@@ -217,14 +237,31 @@ public class SlideshowController {
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
 
+        // Edge vignette tinted to each photo's mood color (Ambilight-for-photos).
+        ambientGlow = new View(context);
+        ambientGlow.setLayoutParams(new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT));
+        if (!ambientColor) {
+            ambientGlow.setVisibility(View.GONE);
+        }
+
         // Shimmer over the dark first frame so it never looks "stuck" while loading.
         shimmer = new ShimmerView(context);
         shimmer.setLayoutParams(new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
 
+        if (!showClock) {
+            clockBox.setVisibility(View.GONE);
+        }
+        if (!captions) {
+            info.setVisibility(View.GONE);
+        }
+
         root.addView(back);
         root.addView(front);
+        root.addView(ambientGlow);
         root.addView(nightTint);
         root.addView(shimmer);
         root.addView(topScrim);
@@ -234,10 +271,12 @@ public class SlideshowController {
         root.addView(clockBox);
         root.addView(buildTouchOverlay());
 
-        // Run clock + weather + shimmer from the start so they're alive even during
-        // the initial "Loading…" wait before the first photo arrives.
+        // Run clock/night + weather + shimmer from the start so they're alive even
+        // during the initial "Loading…" wait before the first photo arrives.
         startClock();
-        startWeather();
+        if (showClock) {
+            startWeather();
+        }
         shimmer.startSweep();
     }
 
@@ -359,7 +398,9 @@ public class SlideshowController {
     public void start() {
         running = true;
         startClock();
-        startWeather();
+        if (showClock) {
+            startWeather();
+        }
         if (!shimmerHidden) {
             shimmer.startSweep();
         }
@@ -370,7 +411,9 @@ public class SlideshowController {
                 smartShuffle(items);
             }
         }
-        promoteOnThisDay(items); // no-op for bundled samples (no dates)
+        if (onThisDay) {
+            promoteOnThisDay(items); // no-op for bundled samples (no dates)
+        }
         if (items.isEmpty()) {
             status.setText("No slides found in assets/" + SLIDES_DIR);
             back.setBackgroundColor(Color.DKGRAY);
@@ -389,6 +432,10 @@ public class SlideshowController {
         handler.removeCallbacks(weatherTick);
         shimmer.stopSweep();
         front.animate().cancel();
+        if (kbAnim != null) {
+            kbAnim.cancel();
+            kbAnim = null;
+        }
     }
 
     /** Swap the photo source at runtime (e.g. bundled samples -> album). */
@@ -400,11 +447,15 @@ public class SlideshowController {
         if (shuffle) {
             smartShuffle(items);
         }
-        promoteOnThisDay(items);
+        if (onThisDay) {
+            promoteOnThisDay(items);
+        }
         remote = true;
         handler.removeCallbacks(autoTick);
         startClock();
-        startWeather();
+        if (showClock) {
+            startWeather();
+        }
         if (!shimmerHidden) {
             shimmer.startSweep();
         }
@@ -481,6 +532,10 @@ public class SlideshowController {
                         noteShown(j);
                     }
                     hideShimmer();
+                    kbPath = newKenBurnsPath(b);
+                    applyKenBurnsStart(back, kbPath);
+                    startKenBurnsOnBack(gen);
+                    updateAmbient(b);
                 }
                 prefetchNext(nextStart(i, isPair));
                 scheduleAuto();
@@ -526,6 +581,10 @@ public class SlideshowController {
                     noteShown(j);
                 }
                 hideShimmer();
+                // Incoming image shows the path's START transform during the fade; when it
+                // settles onto `back` we hand off at the same transform and animate to the end.
+                kbPath = newKenBurnsPath(bmp);
+                applyKenBurnsStart(front, kbPath);
                 front.animate().alpha(1f).setDuration(fadeMs).withEndAction(new Runnable() {
                     @Override
                     public void run() {
@@ -533,7 +592,11 @@ public class SlideshowController {
                             return;
                         }
                         back.setImageBitmap(bmp);
+                        applyKenBurnsStart(back, kbPath);
                         front.setAlpha(0f);
+                        applyKenBurnsStart(front, null); // reset incoming view for reuse
+                        startKenBurnsOnBack(gen);
+                        updateAmbient(bmp);
                         prefetchNext(nextStart(next, isPair));
                         scheduleAuto();
                     }
@@ -571,6 +634,144 @@ public class SlideshowController {
     private void prefetchNext(int startIndex) {
         if (items.size() > 1 && startIndex >= 0 && startIndex < items.size()) {
             loader.prefetch(items.get(startIndex).id, reqW, reqH);
+        }
+    }
+
+    // ---------------------------------------------------------------- ambient color
+
+    /** Tint the edge vignette to the photo's mood color (no-op when disabled). */
+    private void updateAmbient(Bitmap bmp) {
+        if (!ambientColor || bmp == null) {
+            return;
+        }
+        Integer c = AmbientColor.extract(bmp);
+        if (c == null) {
+            ambientGlow.animate().alpha(0f).setDuration(600);
+            return;
+        }
+        int edge = (c & 0x00FFFFFF) | 0x70000000; // ~44% alpha at the edges
+        GradientDrawable g = new GradientDrawable();
+        g.setGradientType(GradientDrawable.RADIAL_GRADIENT);
+        g.setGradientRadius(Math.max(reqW, reqH) * 0.62f);
+        g.setGradientCenter(0.5f, 0.5f);
+        g.setColors(new int[]{0x00000000, 0x00000000, edge}); // clear core -> color rim
+        ambientGlow.setBackground(g);
+        ambientGlow.animate().alpha(1f).setDuration(600);
+    }
+
+    // ---------------------------------------------------------------- Ken Burns
+
+    /** Put a view at the start of the current path (or reset to identity if off). */
+    private void applyKenBurnsStart(View v, KenBurns p) {
+        if (p == null) {
+            v.setScaleX(1f);
+            v.setScaleY(1f);
+            v.setTranslationX(0f);
+            v.setTranslationY(0f);
+        } else {
+            p.applyAt(v, 0f);
+        }
+    }
+
+    /** Animate the settled image ({@code back}) along the path over the hold time. */
+    private void startKenBurnsOnBack(final long gen) {
+        if (kbAnim != null) {
+            kbAnim.cancel();
+            kbAnim = null;
+        }
+        if (kbPath == null) {
+            return;
+        }
+        final KenBurns p = kbPath;
+        ValueAnimator a = ValueAnimator.ofFloat(0f, 1f);
+        a.setDuration(Math.max(intervalMs, 1200L) + autoFadeMs);
+        a.setInterpolator(new LinearInterpolator());
+        a.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+            @Override
+            public void onAnimationUpdate(ValueAnimator va) {
+                if (gen != animGen) {
+                    va.cancel();
+                    return;
+                }
+                p.applyAt(back, (Float) va.getAnimatedValue());
+            }
+        });
+        kbAnim = a;
+        a.start();
+    }
+
+    /** Build the path for the slide just loaded (face-biased when available). */
+    private KenBurns newKenBurnsPath(Bitmap bmp) {
+        if (!kenBurns) {
+            return null;
+        }
+        float[] focus = (faceFraming && bmp != null) ? FaceFocus.find(bmp) : null;
+        return KenBurns.random(reqW, reqH, rnd, focus);
+    }
+
+    /**
+     * A slow zoom + gentle pan applied to the settled image while it's held — the
+     * cinematic "Ken Burns" motion. The path is edge-safe: pan is bounded by the
+     * slack of the smallest scale on the path, so the scaled image always covers
+     * the view (no black/blur reveal). When a focal point is given (e.g. a detected
+     * face), the motion eases toward it.
+     */
+    private static final class KenBurns {
+        private static final float ZOOM_MIN = 1.08f;
+        private static final float ZOOM_MAX = 1.18f;
+        final float s0, s1, tx0, tx1, ty0, ty1;
+
+        private KenBurns(float s0, float s1, float tx0, float tx1, float ty0, float ty1) {
+            this.s0 = s0;
+            this.s1 = s1;
+            this.tx0 = tx0;
+            this.tx1 = tx1;
+            this.ty0 = ty0;
+            this.ty1 = ty1;
+        }
+
+        /**
+         * @param focus optional {fx, fy} in [0,1] image space to drift toward; null = random.
+         */
+        static KenBurns random(int w, int h, java.util.Random r, float[] focus) {
+            float s0 = ZOOM_MIN + r.nextFloat() * (ZOOM_MAX - ZOOM_MIN);
+            float s1 = ZOOM_MIN + r.nextFloat() * (ZOOM_MAX - ZOOM_MIN);
+            float minS = Math.min(s0, s1);
+            float slackX = (minS - 1f) / 2f * w * 0.9f; // 90% of cover slack, for safety
+            float slackY = (minS - 1f) / 2f * h * 0.9f;
+            float tx0, tx1, ty0, ty1;
+            if (focus != null) {
+                // End centred on the focal point (translate so it moves toward centre);
+                // start from a gentle offset on the opposite side for visible motion.
+                float ex = clamp((0.5f - focus[0]) * 2f, -1f, 1f) * slackX;
+                float ey = clamp((0.5f - focus[1]) * 2f, -1f, 1f) * slackY;
+                tx1 = ex;
+                ty1 = ey;
+                tx0 = clamp(ex * -0.4f + (r.nextFloat() - 0.5f) * slackX * 0.5f, -slackX, slackX);
+                ty0 = clamp(ey * -0.4f + (r.nextFloat() - 0.5f) * slackY * 0.5f, -slackY, slackY);
+                // bias toward zooming IN on the face
+                if (s1 < s0) {
+                    float t = s0; s0 = s1; s1 = t;
+                }
+            } else {
+                tx0 = (r.nextFloat() * 2f - 1f) * slackX;
+                tx1 = (r.nextFloat() * 2f - 1f) * slackX;
+                ty0 = (r.nextFloat() * 2f - 1f) * slackY;
+                ty1 = (r.nextFloat() * 2f - 1f) * slackY;
+            }
+            return new KenBurns(s0, s1, tx0, tx1, ty0, ty1);
+        }
+
+        void applyAt(View v, float f) {
+            float s = s0 + (s1 - s0) * f;
+            v.setScaleX(s);
+            v.setScaleY(s);
+            v.setTranslationX(tx0 + (tx1 - tx0) * f);
+            v.setTranslationY(ty0 + (ty1 - ty0) * f);
+        }
+
+        private static float clamp(float v, float lo, float hi) {
+            return v < lo ? lo : (v > hi ? hi : v);
         }
     }
 
@@ -722,6 +923,12 @@ public class SlideshowController {
 
     private void updateClock() {
         Calendar c = Calendar.getInstance();
+        nightTint.setAlpha(nightMode
+                ? warmthForHour(c.get(Calendar.HOUR_OF_DAY) + c.get(Calendar.MINUTE) / 60f)
+                : 0f);
+        if (!showClock) {
+            return; // night tint still updates above; clock/weather text is off
+        }
         clock.setText(timeFmt.format(c.getTime()));
         String date = dateFmt.format(c.getTime());
         if (weather == null) {
@@ -740,8 +947,6 @@ public class SlideshowController {
         } else {
             dateLine.setText(date + "   " + weather.label());
         }
-        nightTint.setAlpha(warmthForHour(
-                c.get(Calendar.HOUR_OF_DAY) + c.get(Calendar.MINUTE) / 60f));
     }
 
     /**

@@ -296,7 +296,34 @@ public class PhotosActivity extends Activity {
             }
         });
         slideCard.addView(pairsRow);
+        slideCard.addView(Ui.hairline(this));
+        slideCard.addView(boolRow("Cinematic motion",
+                ConfigReceiver.KEY_KEN_BURNS, ConfigReceiver.DEFAULT_KEN_BURNS));
+        slideCard.addView(Ui.hairline(this));
+        slideCard.addView(boolRow("Photo captions",
+                ConfigReceiver.KEY_CAPTIONS, ConfigReceiver.DEFAULT_CAPTIONS));
         right.addView(slideCard);
+
+        // Ambient & on-device AI demos
+        LinearLayout aiCard = Ui.card(this);
+        aiCard.addView(Ui.sectionLabel(this, "Ambient intelligence"));
+        View faceRow = boolRow("Face-aware framing",
+                ConfigReceiver.KEY_FACE, ConfigReceiver.DEFAULT_FACE);
+        topMargin(faceRow, 8);
+        aiCard.addView(faceRow);
+        aiCard.addView(Ui.hairline(this));
+        aiCard.addView(boolRow("Ambient color glow",
+                ConfigReceiver.KEY_AMBIENT, ConfigReceiver.DEFAULT_AMBIENT));
+        aiCard.addView(Ui.hairline(this));
+        aiCard.addView(boolRow("Clock & weather",
+                ConfigReceiver.KEY_CLOCK, ConfigReceiver.DEFAULT_CLOCK));
+        aiCard.addView(Ui.hairline(this));
+        aiCard.addView(boolRow("Night warmth",
+                ConfigReceiver.KEY_NIGHT, ConfigReceiver.DEFAULT_NIGHT));
+        aiCard.addView(Ui.hairline(this));
+        aiCard.addView(boolRow("On This Day memories",
+                ConfigReceiver.KEY_ON_THIS_DAY, ConfigReceiver.DEFAULT_ON_THIS_DAY));
+        right.addView(aiCard);
 
         // Tips
         LinearLayout tipsCard = Ui.card(this);
@@ -326,6 +353,20 @@ public class PhotosActivity extends Activity {
         }
         lp.topMargin = Ui.dp(this, dp);
         v.setLayoutParams(lp);
+    }
+
+    /** A tappable On/Off row bound to a boolean pref. */
+    private View boolRow(String label, final String key, final boolean def) {
+        final View row = Ui.row(this, label, prefs().getBoolean(key, def) ? "On" : "Off", null);
+        row.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                boolean next = !prefs().getBoolean(key, def);
+                prefs().edit().putBoolean(key, next).apply();
+                Ui.setRowValue(row, next ? "On" : "Off");
+            }
+        });
+        return row;
     }
 
     private static long cycle(long[] choices, long cur, int fallback) {
