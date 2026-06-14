@@ -71,7 +71,7 @@ public class MainActivity extends Activity {
         controller.setOnSettings(new Runnable() {
             @Override
             public void run() {
-                startActivity(new Intent(MainActivity.this, PhotosActivity.class));
+                startActivity(new Intent(MainActivity.this, SettingsActivity.class));
             }
         });
     }
