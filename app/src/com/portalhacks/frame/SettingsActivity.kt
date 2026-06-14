@@ -12,6 +12,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -113,14 +114,98 @@ class SettingsActivity : ComponentActivity() {
         val hasAlbum = album.isNotEmpty()
         tick // read so writes that bump it recompose
 
-        Box(
+        // Card groups, so the layout can be one or two columns by available width.
+        val sourceCards: @Composable () -> Unit = {
+            Card("Screensaver") {
+                val active = isOurScreensaver()
+                Body(
+                    if (active)
+                        "✓ Frame is your screensaver. Your photos appear when the Portal is idle."
+                    else
+                        "Tap below, then choose “Frame” so your photos show when the Portal is idle.",
+                )
+                Spacer(Modifier.height(12.dp))
+                if (active) OutlineBtn("Change screensaver") { openScreensaver() }
+                else PrimaryBtn("Use as screensaver") { openScreensaver() }
+            }
+            Card(if (hasAlbum) "Album" else "No album yet") {
+                if (hasAlbum) {
+                    AlbumPreview(album)
+                } else {
+                    Body("Add a Google Photos shared album to show your own photos.")
+                }
+                Spacer(Modifier.height(12.dp))
+                PrimaryBtn(if (hasAlbum) "Change album" else "Add album") { gotoPhotos("scan") }
+                Spacer(Modifier.height(10.dp))
+                OutlineBtn("Enter link manually") { gotoPhotos("manual") }
+                if (hasAlbum) {
+                    Spacer(Modifier.height(10.dp))
+                    var armed by remember { mutableStateOf(false) }
+                    OutlinedButton(
+                        onClick = {
+                            if (!armed) armed = true
+                            else {
+                                prefs.edit().remove(ConfigReceiver.KEY_ALBUM).apply()
+                                tick++
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth().height(56.dp),
+                    ) {
+                        Text(
+                            if (armed) "Tap again to confirm" else "Stop showing photos",
+                            color = PortalColors.Red, fontSize = 18.sp,
+                        )
+                    }
+                }
+            }
+        }
+        val settingsCards: @Composable () -> Unit = {
+            Card("Slideshow") {
+                CycleRow("Seconds per photo", fmtDelay(getLong(ConfigReceiver.KEY_DELAY_MS, 6000))) {
+                    val next = cycle(DELAY_CHOICES, getLong(ConfigReceiver.KEY_DELAY_MS, 6000), 0)
+                    setLong(ConfigReceiver.KEY_DELAY_MS, next); tick++
+                }
+                Divider()
+                ToggleRow("Shuffle photos", ConfigReceiver.KEY_SHUFFLE, false) { tick++ }
+                Divider()
+                CycleRow("Transition", fadeLabel(getLong(ConfigReceiver.KEY_FADE_MS, 1200))) {
+                    val next = cycle(FADE_CHOICES, getLong(ConfigReceiver.KEY_FADE_MS, 1200), 1)
+                    setLong(ConfigReceiver.KEY_FADE_MS, next); tick++
+                }
+                Divider()
+                ToggleRow("Side-by-side portraits", ConfigReceiver.KEY_PAIRS, true) { tick++ }
+                Divider()
+                ToggleRow("Cinematic motion", ConfigReceiver.KEY_KEN_BURNS, true) { tick++ }
+                Divider()
+                ToggleRow("Photo captions", ConfigReceiver.KEY_CAPTIONS, true) { tick++ }
+            }
+            Card("Ambient intelligence") {
+                ToggleRow("Face-aware framing", ConfigReceiver.KEY_FACE, true) { tick++ }
+                Divider()
+                ToggleRow("Auto-enhance photos", ConfigReceiver.KEY_ENHANCE, true) { tick++ }
+                Divider()
+                ToggleRow("Ambient color glow", ConfigReceiver.KEY_AMBIENT, true) { tick++ }
+                Divider()
+                ToggleRow("Clock & weather", ConfigReceiver.KEY_CLOCK, true) { tick++ }
+                Divider()
+                ToggleRow("Night warmth", ConfigReceiver.KEY_NIGHT, true) { tick++ }
+                Divider()
+                ToggleRow("On This Day memories", ConfigReceiver.KEY_ON_THIS_DAY, true) { tick++ }
+            }
+        }
+
+        BoxWithConstraints(
             Modifier.fillMaxSize().background(PortalColors.Bg),
             contentAlignment = Alignment.TopCenter,
         ) {
+            // Two columns only when there's room (Portal Go/+ landscape); one column
+            // on the original Portal's portrait screen and the small Portal Mini.
+            val twoCol = maxWidth >= 880.dp
+            val sidePad = if (maxWidth < 560.dp) 24.dp else 40.dp
             Column(
-                Modifier.widthIn(max = 1100.dp).fillMaxWidth()
+                Modifier.widthIn(max = if (twoCol) 1100.dp else 620.dp).fillMaxWidth()
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 40.dp, vertical = 72.dp),
+                    .padding(horizontal = sidePad, vertical = 72.dp),
             ) {
                 Text(
                     if (hasAlbum) "Your photos" else "Show your Google Photos",
@@ -128,97 +213,16 @@ class SettingsActivity : ComponentActivity() {
                 )
                 Spacer(Modifier.height(8.dp))
 
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-                  // -------------------------------------------------- LEFT column
-                  Column(Modifier.weight(1f)) {
-                // Screensaver
-                Card("Screensaver") {
-                    val active = isOurScreensaver()
-                    Body(
-                        if (active)
-                            "✓ Frame is your screensaver. Your photos appear when the Portal is idle."
-                        else
-                            "Tap below, then choose “Frame” so your photos show when the Portal is idle.",
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    if (active) OutlineBtn("Change screensaver") { openScreensaver() }
-                    else PrimaryBtn("Use as screensaver") { openScreensaver() }
-                }
-
-                // Album
-                Card(if (hasAlbum) "Album" else "No album yet") {
-                    if (hasAlbum) {
-                        AlbumPreview(album)
-                    } else {
-                        Body("Add a Google Photos shared album to show your own photos.")
+                if (twoCol) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+                        Column(Modifier.weight(1f)) { sourceCards() }
+                        Spacer(Modifier.width(24.dp))
+                        Column(Modifier.weight(1f)) { settingsCards() }
                     }
-                    Spacer(Modifier.height(12.dp))
-                    PrimaryBtn(if (hasAlbum) "Change album" else "Add album") { gotoPhotos("scan") }
-                    Spacer(Modifier.height(10.dp))
-                    OutlineBtn("Enter link manually") { gotoPhotos("manual") }
-                    if (hasAlbum) {
-                        Spacer(Modifier.height(10.dp))
-                        var armed by remember { mutableStateOf(false) }
-                        OutlinedButton(
-                            onClick = {
-                                if (!armed) armed = true
-                                else {
-                                    prefs.edit().remove(ConfigReceiver.KEY_ALBUM).apply()
-                                    tick++
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth().height(56.dp),
-                        ) {
-                            Text(
-                                if (armed) "Tap again to confirm" else "Stop showing photos",
-                                color = PortalColors.Red, fontSize = 18.sp,
-                            )
-                        }
-                    }
+                } else {
+                    sourceCards()
+                    settingsCards()
                 }
-                  } // end LEFT column
-
-                  Spacer(Modifier.width(24.dp))
-
-                  // -------------------------------------------------- RIGHT column
-                  Column(Modifier.weight(1f)) {
-                // Slideshow
-                Card("Slideshow") {
-                    CycleRow("Seconds per photo", fmtDelay(getLong(ConfigReceiver.KEY_DELAY_MS, 6000))) {
-                        val next = cycle(DELAY_CHOICES, getLong(ConfigReceiver.KEY_DELAY_MS, 6000), 0)
-                        setLong(ConfigReceiver.KEY_DELAY_MS, next); tick++
-                    }
-                    Divider()
-                    ToggleRow("Shuffle photos", ConfigReceiver.KEY_SHUFFLE, false) { tick++ }
-                    Divider()
-                    CycleRow("Transition", fadeLabel(getLong(ConfigReceiver.KEY_FADE_MS, 1200))) {
-                        val next = cycle(FADE_CHOICES, getLong(ConfigReceiver.KEY_FADE_MS, 1200), 1)
-                        setLong(ConfigReceiver.KEY_FADE_MS, next); tick++
-                    }
-                    Divider()
-                    ToggleRow("Side-by-side portraits", ConfigReceiver.KEY_PAIRS, true) { tick++ }
-                    Divider()
-                    ToggleRow("Cinematic motion", ConfigReceiver.KEY_KEN_BURNS, true) { tick++ }
-                    Divider()
-                    ToggleRow("Photo captions", ConfigReceiver.KEY_CAPTIONS, true) { tick++ }
-                }
-
-                // Ambient intelligence
-                Card("Ambient intelligence") {
-                    ToggleRow("Face-aware framing", ConfigReceiver.KEY_FACE, true) { tick++ }
-                    Divider()
-                    ToggleRow("Auto-enhance photos", ConfigReceiver.KEY_ENHANCE, true) { tick++ }
-                    Divider()
-                    ToggleRow("Ambient color glow", ConfigReceiver.KEY_AMBIENT, true) { tick++ }
-                    Divider()
-                    ToggleRow("Clock & weather", ConfigReceiver.KEY_CLOCK, true) { tick++ }
-                    Divider()
-                    ToggleRow("Night warmth", ConfigReceiver.KEY_NIGHT, true) { tick++ }
-                    Divider()
-                    ToggleRow("On This Day memories", ConfigReceiver.KEY_ON_THIS_DAY, true) { tick++ }
-                }
-                  } // end RIGHT column
-                } // end Row
 
                 // Leave room so the last card scrolls clear of the pinned Done bar below.
                 Spacer(Modifier.height(96.dp))
@@ -272,17 +276,25 @@ class SettingsActivity : ComponentActivity() {
         var title by remember(album) { mutableStateOf("") }
         var failed by remember(album) { mutableStateOf(false) }
 
+        // Show the photo, or fall back to the error state (don't hang on "Loading…"
+        // if the image itself fails to decode/download).
+        val onBitmap = ImageLoader.Callback { b ->
+            if (b != null) bmp = b else failed = true
+        }
+
         LaunchedEffect(album) {
             if (album.isEmpty()) return@LaunchedEffect
             AlbumCache.title(prefs, album)?.let { title = it }
             val firstId = AlbumCache.firstId(prefs, album)
             if (firstId != null) {
-                loader.load(firstId, PREVIEW_W, PREVIEW_H) { b -> bmp = b }
+                android.util.Log.i("PortalFrame", "album preview from cache: $firstId")
+                loader.load(firstId, PREVIEW_W, PREVIEW_H, onBitmap)
             } else {
                 // Not fetched yet (album just added) — fetch once, persist, then show.
                 loader.executor().execute {
                     try {
                         val a = GooglePhotosSource.fetch(album)
+                        android.util.Log.i("PortalFrame", "album preview fetched ${a.slides.size} photos")
                         if (a.slides.isEmpty()) {
                             runOnUiThread { failed = true }
                             return@execute
@@ -293,10 +305,11 @@ class SettingsActivity : ComponentActivity() {
                             // ignore if the user changed the album while fetching
                             if (album == (prefs.getString(ConfigReceiver.KEY_ALBUM, "") ?: "")) {
                                 title = a.title ?: ""
-                                loader.load(id, PREVIEW_W, PREVIEW_H) { b -> bmp = b }
+                                loader.load(id, PREVIEW_W, PREVIEW_H, onBitmap)
                             }
                         }
-                    } catch (_: Exception) {
+                    } catch (e: Exception) {
+                        android.util.Log.w("PortalFrame", "album preview fetch failed", e)
                         runOnUiThread { failed = true }
                     }
                 }

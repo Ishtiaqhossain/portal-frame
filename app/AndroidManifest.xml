@@ -24,7 +24,7 @@
             android:exported="true"
             android:theme="@style/Theme.Frame"
             android:excludeFromRecents="true"
-            android:screenOrientation="landscape" />
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout" />
 
         <!-- The real screensaver path: a standard Android DreamService that
              Portal's Daydream framework can be pointed at. -->
@@ -45,7 +45,7 @@
             android:label="Frame"
             android:icon="@mipmap/ic_launcher"
             android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen"
-            android:screenOrientation="landscape">
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -58,7 +58,7 @@
             android:name=".PhotosActivity"
             android:exported="true"
             android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen"
-            android:screenOrientation="landscape" />
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout" />
 
         <!-- Compose slideshow (migration Milestone 4) — develop/verify alongside the
              Java MainActivity screensaver; becomes the dream target once at parity. -->
@@ -66,7 +66,7 @@
             android:name=".SlideshowComposeActivity"
             android:exported="true"
             android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen"
-            android:screenOrientation="landscape" />
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout" />
 
         <!-- Set the Google Photos shared-album URL over ADB (see ConfigReceiver). -->
         <receiver
