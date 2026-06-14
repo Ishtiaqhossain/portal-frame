@@ -69,7 +69,7 @@ class ConfigReceiver : BroadcastReceiver() {
         const val KEY_ENHANCE = "auto_enhance"  // boolean: on-device auto-levels + vibrance
         const val DEFAULT_DELAY_MS = 6000L
         const val DEFAULT_FADE_MS = 1200L
-        const val DEFAULT_PAIRS = true
+        const val DEFAULT_PAIRS = false
         const val DEFAULT_KEN_BURNS = true
         const val DEFAULT_CLOCK = true
         const val DEFAULT_NIGHT = true
