@@ -13,7 +13,6 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
-import java.util.Calendar
 
 /**
  * The live slideshow screensaver, hosted in Jetpack Compose.
@@ -46,6 +45,11 @@ class SlideshowComposeActivity : ComponentActivity() {
                 or WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
                 or WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD,
         )
+        // Honor the Portal's own brightness: don't override the window brightness, so the
+        // system's adaptive/manual brightness (and its light sensor) governs the frame.
+        window.attributes = window.attributes.apply {
+            screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+        }
 
         loader = ImageLoader(this)
         // Build the slideshow's View hierarchy, then host it inside Compose.
@@ -89,7 +93,6 @@ class SlideshowComposeActivity : ComponentActivity() {
         // Clear any photo retained from a previous run so re-entering the frame
         // doesn't flash the old image before the first new frame loads.
         controller.blank()
-        startDimming() // ease screen brightness down at night, up in the morning
         val prefs = getSharedPreferences(ConfigReceiver.PREFS, MODE_PRIVATE)
         currentAlbums = Albums.enabled(prefs)
 
@@ -120,32 +123,7 @@ class SlideshowComposeActivity : ComponentActivity() {
     override fun onPause() {
         super.onPause()
         handler.removeCallbacks(refreshTick)
-        handler.removeCallbacks(dimTick)
         controller.stop()
-    }
-
-    // --- night dimming -------------------------------------------------------
-
-    private val dimTick = object : Runnable {
-        override fun run() {
-            applyBrightness()
-            handler.postDelayed(this, DIM_INTERVAL_MS)
-        }
-    }
-
-    private fun startDimming() {
-        handler.removeCallbacks(dimTick)
-        applyBrightness()
-        handler.postDelayed(dimTick, DIM_INTERVAL_MS)
-    }
-
-    /** Set this window's brightness from the time of day (doesn't touch system settings). */
-    private fun applyBrightness() {
-        val c = Calendar.getInstance()
-        val h = c.get(Calendar.HOUR_OF_DAY) + c.get(Calendar.MINUTE) / 60f
-        val lp = window.attributes
-        lp.screenBrightness = brightnessForHour(h)
-        window.attributes = lp
     }
 
     private val refreshTick = object : Runnable {
@@ -204,29 +182,6 @@ class SlideshowComposeActivity : ComponentActivity() {
     companion object {
         private const val TAG = "PortalFrame"
         private const val REFRESH_INTERVAL_MS = 20 * 60 * 1000L // 20 min
-        private const val DIM_INTERVAL_MS = 5 * 60 * 1000L // re-check brightness
-
-        /**
-         * Full brightness through the day, eased down to a soft glow overnight so the
-         * frame isn't a lighthouse in a dark room. Ramps 21:00→23:00 down and
-         * 06:00→08:00 up; deep night 23:00→06:00.
-         */
-        private fun brightnessForHour(h: Float): Float {
-            val day = 1.0f
-            val night = 0.07f
-            if (h >= 8f && h < 21f) {
-                return day
-            }
-            if (h >= 21f && h < 23f) {
-                return lerp(day, night, (h - 21f) / 2f)
-            }
-            if (h >= 23f || h < 6f) {
-                return night
-            }
-            return lerp(night, day, (h - 6f) / 2f) // 06:00–08:00
-        }
-
-        private fun lerp(a: Float, b: Float, t: Float): Float = a + (b - a) * t
 
         private fun idsOf(slides: List<Slide>): List<String> {
             val ids = ArrayList<String>(slides.size)
