@@ -112,13 +112,13 @@ class ConfigReceiver : BroadcastReceiver() {
         const val DEFAULT_PAIRS = false
         const val DEFAULT_KEN_BURNS = true
         const val DEFAULT_CLOCK = true
-        const val DEFAULT_CLOCK_LOW_LIGHT = false
+        const val DEFAULT_CLOCK_LOW_LIGHT = true
         const val DEFAULT_NIGHT = true
         const val DEFAULT_ON_THIS_DAY = true
         const val DEFAULT_CAPTIONS = true
         const val DEFAULT_FACE = true
         const val DEFAULT_AMBIENT = true
-        const val DEFAULT_ENHANCE = true
+        const val DEFAULT_ENHANCE = false
 
         // ADB-settable boolean extras (extra name -> pref key) for quick testing, e.g.
         //   adb shell am broadcast -n com.portalhacks.frame/.ConfigReceiver --ez ken_burns false
