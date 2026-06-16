@@ -76,6 +76,13 @@ class PhotosActivity : Activity() {
     private var previewH = 0 // cached so we don't hit getParameters() per frame
     private var frameCount = 0
 
+    // Zoom sweep: cycle a few zoom levels so the AE auto-lands on the one that exposes the QR
+    // correctly for whatever phone screen is in front of the camera. Zoom is the only working
+    // exposure lever on this HAL (EV is ignored, AE can't be disabled), and the ideal level
+    // depends on the phone's screen brightness — so we sweep instead of betting one constant.
+    private var zoomLevels: IntArray = intArrayOf()
+    private var zoomIdx = 0
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -520,9 +527,9 @@ class PhotosActivity : Activity() {
         topCol.addView(title)
         val subtitle = TextView(this)
         this.scanHint = subtitle // reused for "that QR isn't…/Album added ✓" feedback
-        // The lens is fixed-focus (sharp only past ~0.6m) and ultra-wide, so a QR fills very few
-        // pixels up close where it's also blurry. Counterintuitive but correct guidance: make the
-        // code big and hold it back at arm's length so it's both in focus and large enough to read.
+        // Empirically the QR decodes best held close — ~3 inches from the lens — so the bright
+        // screen fills the whole ultra-wide frame: that maxes the AE-exposes-down effect (the
+        // only working exposure lever here) and the zoom sweep crops in for the module detail.
         subtitle.text = DEFAULT_SCAN_HINT
         subtitle.setTextColor(0xFFD2D2D2.toInt())
         subtitle.typeface = Ui.medium(this)
@@ -603,9 +610,17 @@ class PhotosActivity : Activity() {
             // *fills the frame*, so the AE meters the screen and exposes down — the one lever that
             // actually moves exposure on this HAL (EV is ignored). zoompct is tunable for testing.
             if (pr.isZoomSupported) {
-                val zoomPct = intent?.getIntExtra("zoompct", 90) ?: 90
-                val z = Math.max(1, Math.min(pr.maxZoom, pr.maxZoom * zoomPct / 100))
-                pr.zoom = z
+                // A fixed `zoompct` override pins one level (for on-device testing); otherwise
+                // sweep a few levels at runtime so the scanner self-tunes the exposure to the
+                // phone in front of it rather than relying on a single hardcoded guess.
+                val fixed = intent?.getIntExtra("zoompct", 0) ?: 0
+                val pcts = if (fixed > 0) intArrayOf(fixed) else intArrayOf(80, 90, 100)
+                zoomLevels = pcts
+                    .map { Math.max(1, Math.min(pr.maxZoom, pr.maxZoom * it / 100)) }
+                    .distinct()
+                    .toIntArray()
+                zoomIdx = 0
+                pr.zoom = zoomLevels.first()
             }
             // Force the highest fixed frame rate the camera offers. A fixed high FPS caps the
             // exposure *time* the AE is allowed to integrate, so it physically can't over-expose
@@ -623,12 +638,10 @@ class PhotosActivity : Activity() {
                 }
                 Log.i(TAG, "QR cam fps ranges=" + ranges?.joinToString { it.contentToString() })
             }
-            // The blow-out fix above is the zoom (it makes the bright screen fill the frame so the
-            // AE exposes for it). The exposure controls below are a defensive *secondary*: on this
-            // Portal Go HAL they're no-ops — measured: EV -9 didn't change the frame and AE can't
-            // be turned off — but other Portal models / firmwares may honour them, and they can't
-            // hurt. Barcode scene mode is preferred when offered (purpose-built, and it takes over
-            // metering/exposure itself, so it's used alone); otherwise centre-meter + bias dark.
+            // Exposure controls: bias dark so the bright phone screen doesn't blow out as the room
+            // (now larger in the wider, low-zoom frame) pulls the AE brighter. Measured safe here —
+            // EV -9 left luma mean ~75 (not crushed). Barcode scene mode is preferred when offered
+            // (it drives metering itself, so it's used alone); otherwise centre-meter + bias dark.
             val sceneModes = pr.supportedSceneModes
             val usingBarcodeScene =
                 sceneModes?.contains(Camera.Parameters.SCENE_MODE_BARCODE) == true
@@ -711,10 +724,14 @@ class PhotosActivity : Activity() {
                         " bytes=" + data.size,
                 )
             }
-            if (frameCount and 1 == 0) {
-                // decode every other frame to keep the multi-pass cost down
-                return@PreviewCallback
+            // Step the zoom sweep periodically, holding each level long enough for the AE to
+            // settle before we judge it (zoom is this HAL's only exposure control).
+            if (zoomLevels.size > 1 && frameCount % ZOOM_STEP_FRAMES == 0) {
+                zoomIdx = (zoomIdx + 1) % zoomLevels.size
+                applyZoom(zoomLevels[zoomIdx])
             }
+            // Decode every frame: the Camera1 callback naturally drops frames while we're busy,
+            // so this self-throttles to whatever the CPU sustains rather than fixed half-rate.
             val text = tryDecode(data, previewW, previewH)
             if (text != null) {
                 scanning = false // stop processing further frames until we decide
@@ -762,17 +779,35 @@ class PhotosActivity : Activity() {
             return null
         }
         // Hybrid binarizer is best for sharp images; the global-histogram one sometimes wins on
-        // the soft, low-contrast frames this fixed-focus wide camera produces. Try both.
-        for (bin in arrayOf(HybridBinarizer(src), GlobalHistogramBinarizer(src))) {
-            try {
-                return reader.decode(BinaryBitmap(bin), HINTS).text
-            } catch (notFound: Exception) {
-                // try the next binarizer
-            } finally {
-                reader.reset()
+        // the soft, low-contrast frames this fixed-focus wide camera produces. And a blown-out
+        // bright screen often binarizes as a negative, so try the inverted luma too. Each combo
+        // is cheap relative to grabbing another frame; the first to decode wins.
+        for (lum in arrayOf(src, src.invert())) {
+            for (bin in arrayOf(HybridBinarizer(lum), GlobalHistogramBinarizer(lum))) {
+                try {
+                    return reader.decode(BinaryBitmap(bin), HINTS).text
+                } catch (notFound: Exception) {
+                    // try the next binarizer / inversion
+                } finally {
+                    reader.reset()
+                }
             }
         }
         return null
+    }
+
+    /** Re-apply just the zoom level mid-stream (cheap next to a full camera reconfigure). */
+    private fun applyZoom(z: Int) {
+        try {
+            val c = camera ?: return
+            val p = c.parameters
+            if (p.isZoomSupported && p.zoom != z) {
+                p.zoom = z
+                c.parameters = p
+            }
+        } catch (ignored: Exception) {
+            // best-effort; a dropped zoom step just retries on the next cycle
+        }
     }
 
     private fun onQr(text: String?) {
@@ -811,9 +846,10 @@ class PhotosActivity : Activity() {
     companion object {
         private const val TAG = "PortalFrame"
         private const val REQ_CAMERA = 1
+        private const val ZOOM_STEP_FRAMES = 12 // frames held at each zoom level before stepping
         private const val DEFAULT_SCAN_HINT =
-            "Make the QR large and fill the box with it at about arm's length — or paste the " +
-                "link below."
+            "Hold the phone close — about 3 inches from the camera — so the QR fills the box. " +
+                "Or paste the link below."
         private const val SCREENSAVER_COMPONENT =
             "com.portalhacks.frame/com.portalhacks.frame.FrameDreamService"
 
