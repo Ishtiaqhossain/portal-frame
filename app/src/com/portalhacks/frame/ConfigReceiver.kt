@@ -38,6 +38,13 @@ class ConfigReceiver : BroadcastReceiver() {
                 else -> Log.w("PortalFrame", "ignoring unrecognised album_url")
             }
         }
+        // Sticky-note text shown on the frame. Set with --es note "Buy milk"; clear with an
+        // empty string. (Prototype: rendered as a post-it overlay by SlideshowController.)
+        if (intent.hasExtra("note")) {
+            val note = intent.getStringExtra("note") ?: ""
+            prefs.edit().putString(KEY_NOTE, note).apply()
+            Log.i("PortalFrame", "note set (${note.length} chars)")
+        }
         if (intent.hasExtra("remove_url")) {
             val url = intent.getStringExtra("remove_url")?.trim() ?: ""
             if (url.isNotEmpty()) {
@@ -92,6 +99,9 @@ class ConfigReceiver : BroadcastReceiver() {
         const val KEY_ALBUMS = "album_urls" // JSON array of configured album URLs
         const val KEY_ALBUMS_DISABLED = "album_urls_disabled" // JSON array of stopped album URLs
         const val KEY_GUARD = "screensaver_guard" // boolean: keep re-asserting Frame as the dream
+        const val KEY_NOTE = "note" // sticky-note text shown on the frame ("" = hidden)
+        const val KEY_NOTE_DX = "note_dx" // note position (fraction of screen W) from its top-right anchor
+        const val KEY_NOTE_DY = "note_dy" // note position (fraction of screen H) from its top-right anchor
 
         // Slideshow settings (written by PhotosActivity, read by SlideshowController).
         const val KEY_DELAY_MS = "delay_ms"     // ms each photo is held

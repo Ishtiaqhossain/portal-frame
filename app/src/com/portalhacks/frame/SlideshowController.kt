@@ -5,9 +5,13 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.ColorFilter
 import android.graphics.ColorMatrixColorFilter
 import android.graphics.LinearGradient
+import android.graphics.Outline
 import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.PixelFormat
 import android.graphics.Rect
 import android.graphics.Shader
 import android.graphics.drawable.BitmapDrawable
@@ -73,6 +77,9 @@ class SlideshowController(
     private val clockOnlyBox: LinearLayout
     private val dateLine: TextView
     private val clockEditHint: TextView // "drag/pinch/tap" hint shown while editing the clock
+    private val noteBox: TextView // sticky-note overlay (top-right); hidden when empty
+    private val binBox: LinearLayout // trash target shown while dragging the note
+    private val binGlyph: TextView // the bin icon inside binBox (tinted on hover)
     private val shimmer: ShimmerView
     private val timeFmt: DateFormat
     private val dateFmt = SimpleDateFormat("EEE, MMM d", Locale.getDefault())
@@ -132,6 +139,14 @@ class SlideshowController(
     private var clockDy = 0f
     private var clockScale = 1f
 
+    // Sticky-note state. Text is set over ADB / Settings ("" hides it); dx/dy are the note's
+    // position as a fraction of screen W/H from its top-right anchor (drag to move). Vars so
+    // they update live. draggingNote is true between grabbing the note and releasing it.
+    private var noteText = ""
+    private var noteDx = 0f
+    private var noteDy = 0f
+    private var draggingNote = false
+
     init {
         val dm = context.resources.displayMetrics
         reqW = if (dm.widthPixels > 0) dm.widthPixels else 1280
@@ -155,6 +170,9 @@ class SlideshowController(
         clockDx = prefs.getFloat(ConfigReceiver.KEY_CLOCK_DX, ConfigReceiver.DEFAULT_CLOCK_DX)
         clockDy = prefs.getFloat(ConfigReceiver.KEY_CLOCK_DY, ConfigReceiver.DEFAULT_CLOCK_DY)
         clockScale = prefs.getFloat(ConfigReceiver.KEY_CLOCK_SCALE, ConfigReceiver.DEFAULT_CLOCK_SCALE)
+        noteText = prefs.getString(ConfigReceiver.KEY_NOTE, "") ?: ""
+        noteDx = prefs.getFloat(ConfigReceiver.KEY_NOTE_DX, 0f)
+        noteDy = prefs.getFloat(ConfigReceiver.KEY_NOTE_DY, 0f)
         monthYearFmt.timeZone = TimeZone.getTimeZone("UTC")
 
         root.setBackgroundColor(Color.BLACK)
@@ -271,6 +289,71 @@ class SlideshowController(
         cehp.topMargin = Ui.dp(context, 40f)
         clockEditHint.layoutParams = cehp
 
+        // Sticky note: a post-it-style card pinned top-right — warm paper with a vertical
+        // gradient, a folded dog-ear corner, a strip of "tape" across the top and a soft drop
+        // shadow, all drawn by StickyNoteBg. Slightly tilted so it reads as stuck onto the
+        // frame. Drag it to move; drop it on the bin to dismiss. Hidden when empty.
+        noteBox = TextView(context)
+        noteBox.setTextColor(0xFF3B3526.toInt()) // dark ink on amber paper
+        noteBox.typeface = Ui.medium(context)
+        noteBox.setTextSize(TypedValue.COMPLEX_UNIT_SP, 22f)
+        noteBox.setLineSpacing(Ui.dp(context, 3f).toFloat(), 1f)
+        val notePadH = Ui.dp(context, 24f)
+        // Extra top padding leaves room for the tape; extra bottom-right for the folded corner.
+        noteBox.setPadding(notePadH, Ui.dp(context, 26f), notePadH + Ui.dp(context, 6f), Ui.dp(context, 24f))
+        noteBox.maxWidth = Ui.dp(context, 300f)
+        noteBox.background = StickyNoteBg(
+            top = 0xFFFFEFA8.toInt(), // lighter amber at the top edge
+            bottom = 0xFFFFD24A.toInt(), // deeper amber toward the bottom
+            fold = 0xFFE8B838.toInt(), // underside of the folded corner
+            tape = 0x33FFFFFF, // matte translucent tape
+            radiusPx = Ui.dp(context, 5f).toFloat(),
+            foldPx = Ui.dp(context, 26f).toFloat(),
+        )
+        noteBox.elevation = Ui.dp(context, 12f).toFloat() // drop shadow
+        noteBox.rotation = -3f // casual "stuck on" tilt
+        val np = FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT,
+        )
+        np.gravity = Gravity.TOP or Gravity.END
+        np.topMargin = Ui.dp(context, 104f) // clear the Portal system pills + top scrim
+        np.rightMargin = Ui.dp(context, 44f)
+        noteBox.layoutParams = np
+
+        // Trash target: a translucent dark pill with a bin glyph, centred near the bottom.
+        // Hidden until the note is grabbed; it enlarges and turns red while the note hovers it.
+        binGlyph = TextView(context)
+        binGlyph.text = "🗑" // 🗑
+        binGlyph.setTextSize(TypedValue.COMPLEX_UNIT_SP, 34f)
+        binGlyph.gravity = Gravity.CENTER
+        val binLabel = TextView(context)
+        binLabel.text = "Drop to remove"
+        binLabel.setTextColor(0xFFEDEDED.toInt())
+        binLabel.typeface = Ui.medium(context)
+        binLabel.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+        binLabel.gravity = Gravity.CENTER
+        binBox = LinearLayout(context)
+        binBox.orientation = LinearLayout.VERTICAL
+        binBox.gravity = Gravity.CENTER_HORIZONTAL
+        val binPadH = Ui.dp(context, 26f)
+        binBox.setPadding(binPadH, Ui.dp(context, 16f), binPadH, Ui.dp(context, 14f))
+        binBox.background = binPill(false)
+        binBox.elevation = Ui.dp(context, 8f).toFloat()
+        binBox.addView(binGlyph)
+        binBox.addView(
+            binLabel,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply { topMargin = Ui.dp(context, 2f) },
+        )
+        binBox.visibility = View.GONE
+        val binp = FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT,
+        )
+        binp.gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+        binp.bottomMargin = Ui.dp(context, 56f)
+        binBox.layoutParams = binp
+
         // Warm overlay over the photo that fades in at night (Ambient-EQ-lite): the
         // image is dimmed by the window brightness and tinted cozy-warm here.
         nightTint = View(context)
@@ -354,7 +437,10 @@ class SlideshowController(
         root.addView(clockBox)
         root.addView(clockOnlyBox)
         root.addView(clockEditHint)
+        root.addView(noteBox)
+        root.addView(binBox)
         root.addView(buildTouchOverlay())
+        applyNote()
         clockBox.post { applyClockTransformNow() } // apply saved position/size once laid out
 
         // Run clock/night + weather + shimmer from the start so they're alive even
@@ -377,6 +463,126 @@ class SlideshowController(
 
     fun setStatusHint(text: String?) {
         status.text = text
+    }
+
+    /** Update the sticky-note text live (e.g. after it changed over ADB / in Settings). */
+    fun setNote(text: String?) {
+        noteText = text ?: ""
+        applyNote()
+    }
+
+    /** Show the note iff it has text and we're not in low-light clock-only mode. */
+    private fun applyNote() {
+        val t = noteText.trim()
+        if (t.isEmpty() || clockOnly) {
+            noteBox.visibility = View.GONE
+        } else {
+            noteBox.text = t
+            noteBox.visibility = View.VISIBLE
+            noteBox.translationX = noteDx * reqW
+            noteBox.translationY = noteDy * reqH
+        }
+    }
+
+    // ------------------------------------------------ sticky-note drag / dismiss
+
+    /** True if (x,y) in root coords falls on the note (padded a little for an easy grab). */
+    private fun isOnNote(x: Float, y: Float): Boolean {
+        if (noteBox.visibility != View.VISIBLE || noteBox.width == 0) return false
+        val pad = Ui.dp(context, 10f)
+        val l = noteBox.left + noteBox.translationX - pad
+        val t = noteBox.top + noteBox.translationY - pad
+        val r = noteBox.left + noteBox.translationX + noteBox.width + pad
+        val b = noteBox.top + noteBox.translationY + noteBox.height + pad
+        return x >= l && x <= r && y >= t && y <= b
+    }
+
+    /** Move the note by a touch delta, clamped so its centre stays on screen. */
+    private fun dragNoteBy(dx: Float, dy: Float) {
+        val baseCx = noteBox.left + noteBox.width / 2f
+        val baseCy = noteBox.top + noteBox.height / 2f
+        val edge = Ui.dp(context, 8f).toFloat()
+        val w = if (reqW > 0) reqW.toFloat() else noteBox.rootView.width.toFloat()
+        val h = if (reqH > 0) reqH.toFloat() else noteBox.rootView.height.toFloat()
+        val tx = (noteBox.translationX + dx).coerceIn(edge - baseCx, w - edge - baseCx)
+        val ty = (noteBox.translationY + dy).coerceIn(edge - baseCy, h - edge - baseCy)
+        noteBox.translationX = tx
+        noteBox.translationY = ty
+        if (w > 0) noteDx = tx / w
+        if (h > 0) noteDy = ty / h
+    }
+
+    private fun persistNotePos() {
+        context.getSharedPreferences(ConfigReceiver.PREFS, Context.MODE_PRIVATE).edit()
+            .putFloat(ConfigReceiver.KEY_NOTE_DX, noteDx)
+            .putFloat(ConfigReceiver.KEY_NOTE_DY, noteDy)
+            .apply()
+    }
+
+    /** Reveal/hide the trash target while the note is being dragged. */
+    private fun showBin() {
+        binBox.scaleX = 1f
+        binBox.scaleY = 1f
+        binBox.background = binPill(false)
+        binBox.alpha = 0f
+        binBox.visibility = View.VISIBLE
+        binBox.animate().alpha(1f).setDuration(140).start()
+    }
+
+    private fun hideBin() {
+        binBox.animate().alpha(0f).setDuration(140).withEndAction {
+            binBox.visibility = View.GONE
+        }.start()
+        noteBox.alpha = 1f
+    }
+
+    /** True if the note's centre is over the bin (with a generous catch radius). */
+    private fun noteOverBin(): Boolean {
+        if (binBox.width == 0) return false
+        val ncx = noteBox.left + noteBox.translationX + noteBox.width / 2f
+        val ncy = noteBox.top + noteBox.translationY + noteBox.height / 2f
+        val bcx = binBox.left + binBox.width / 2f
+        val bcy = binBox.top + binBox.height / 2f
+        val r = binBox.width / 2f + Ui.dp(context, 28f)
+        return Math.hypot((ncx - bcx).toDouble(), (ncy - bcy).toDouble()) <= r
+    }
+
+    /** Update the bin's hover affordance (enlarge + redden, fade the note) as it's dragged over. */
+    private fun updateBinHover() {
+        val over = noteOverBin()
+        val scale = if (over) 1.22f else 1f
+        binBox.scaleX = scale
+        binBox.scaleY = scale
+        binBox.background = binPill(over)
+        noteBox.alpha = if (over) 0.5f else 1f
+    }
+
+    /** Clear the note (text + position) and animate it away. */
+    private fun dismissNote() {
+        noteText = ""
+        noteDx = 0f
+        noteDy = 0f
+        context.getSharedPreferences(ConfigReceiver.PREFS, Context.MODE_PRIVATE).edit()
+            .putString(ConfigReceiver.KEY_NOTE, "")
+            .putFloat(ConfigReceiver.KEY_NOTE_DX, 0f)
+            .putFloat(ConfigReceiver.KEY_NOTE_DY, 0f)
+            .apply()
+        noteBox.animate().alpha(0f).scaleX(0.4f).scaleY(0.4f).setDuration(200).withEndAction {
+            noteBox.visibility = View.GONE
+            noteBox.alpha = 1f
+            noteBox.scaleX = 1f
+            noteBox.scaleY = 1f
+            noteBox.translationX = 0f
+            noteBox.translationY = 0f
+        }.start()
+    }
+
+    /** Pill background for the bin; reddened while the note hovers it. */
+    private fun binPill(hover: Boolean): GradientDrawable {
+        val g = GradientDrawable()
+        g.setColor(if (hover) 0xE6D23B3B.toInt() else 0xCC1E1E1E.toInt())
+        g.cornerRadius = Ui.dp(context, 20f).toFloat()
+        return g
     }
 
     // ------------------------------------------------ clock move/resize
@@ -510,6 +716,13 @@ class SlideshowController(
                         pinching = false
                         v.parent?.requestDisallowInterceptTouchEvent(true)
                         cancelLong()
+                        if (!editingClock && isOnNote(e.x, e.y)) {
+                            // Touch started on the note → drag it directly (no long-press); the
+                            // bin appears so it can be dropped there to dismiss.
+                            draggingNote = true
+                            showBin()
+                            return true
+                        }
                         if (!editingClock) {
                             // Long-press ON the clock → grab it for edit; elsewhere → settings.
                             val onClock = isOnClock(e.x, e.y)
@@ -535,6 +748,12 @@ class SlideshowController(
                         return true
                     }
                     MotionEvent.ACTION_MOVE -> {
+                        if (draggingNote) {
+                            dragNoteBy(e.x - lastX, e.y - lastY)
+                            lastX = e.x; lastY = e.y
+                            updateBinHover()
+                            return true
+                        }
                         if (editingClock) {
                             if (pinching && e.pointerCount >= 2) {
                                 val d = twoPointerDist(e)
@@ -574,6 +793,12 @@ class SlideshowController(
                     }
                     MotionEvent.ACTION_UP -> {
                         cancelLong()
+                        if (draggingNote) {
+                            draggingNote = false
+                            if (noteOverBin()) dismissNote() else persistNotePos()
+                            hideBin()
+                            return true
+                        }
                         if (editingClock) {
                             val dt = e.eventTime - downTime
                             if (!moved && !pinching && abs(e.x - downX) < TAP_SLOP &&
@@ -600,6 +825,7 @@ class SlideshowController(
                     }
                     MotionEvent.ACTION_CANCEL -> {
                         cancelLong()
+                        if (draggingNote) { draggingNote = false; persistNotePos(); hideBin() }
                         if (editingClock) { pinching = false; persistClockTransform() }
                         return true
                     }
@@ -718,6 +944,7 @@ class SlideshowController(
             return
         }
         clockOnly = on
+        applyNote() // hide the note in clock-only mode, restore it otherwise
         if (on) {
             handler.removeCallbacks(autoTick) // pause advancing
             shimmer.stopSweep()
@@ -1348,6 +1575,88 @@ class SlideshowController(
             )
             canvas.drawRect(0f, 0f, w.toFloat(), h.toFloat(), paint)
         }
+    }
+
+    /**
+     * A post-it look: a rounded paper rect with a top→bottom amber [top]→[bottom] gradient, a
+     * folded dog-ear at the bottom-right ([fold] = its underside shade), and a translucent
+     * [tape] strip across the top. Implements [getOutline] so the host View still casts a
+     * rounded drop shadow under its elevation.
+     */
+    private class StickyNoteBg(
+        private val top: Int,
+        private val bottom: Int,
+        private val fold: Int,
+        private val tape: Int,
+        private val radiusPx: Float,
+        private val foldPx: Float,
+    ) : Drawable() {
+        private val paperPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+        private val foldPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = fold }
+        private val foldShadow = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x22000000 }
+        private val tapePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = tape }
+        private val body = Path()
+        private val flap = Path()
+
+        override fun onBoundsChange(b: Rect) {
+            paperPaint.shader = LinearGradient(
+                0f, b.top.toFloat(), 0f, b.bottom.toFloat(), top, bottom, Shader.TileMode.CLAMP,
+            )
+            val l = b.left.toFloat()
+            val t = b.top.toFloat()
+            val r = b.right.toFloat()
+            val bot = b.bottom.toFloat()
+            val rad = radiusPx
+            val f = foldPx
+            // Paper outline: rounded TL/TR/BL corners, with the BR corner chamfered for the fold.
+            body.reset()
+            body.moveTo(l + rad, t)
+            body.lineTo(r - rad, t)
+            body.quadTo(r, t, r, t + rad)
+            body.lineTo(r, bot - f)
+            body.lineTo(r - f, bot)
+            body.lineTo(l + rad, bot)
+            body.quadTo(l, bot, l, bot - rad)
+            body.lineTo(l, t + rad)
+            body.quadTo(l, t, l + rad, t)
+            body.close()
+            // The folded-up corner triangle (the lifted flap, showing the paper's underside).
+            flap.reset()
+            flap.moveTo(r - f, bot)
+            flap.lineTo(r, bot - f)
+            flap.lineTo(r - f, bot - f)
+            flap.close()
+        }
+
+        override fun draw(canvas: Canvas) {
+            val b = bounds
+            canvas.drawPath(body, paperPaint)
+            // A faint shadow under the diagonal fold edge gives the corner depth.
+            canvas.drawPath(flap, foldShadow)
+            canvas.drawPath(flap, foldPaint)
+            // Tape: a short translucent strip, slightly tilted, centred over the top edge.
+            val cx = b.exactCenterX()
+            val tapeW = (b.width() * 0.34f).coerceAtMost(foldPx * 4f)
+            val tapeH = foldPx * 0.62f
+            val cy = b.top + tapeH * 0.55f
+            canvas.save()
+            canvas.rotate(-7f, cx, cy)
+            canvas.drawRoundRect(
+                cx - tapeW / 2f, cy - tapeH / 2f, cx + tapeW / 2f, cy + tapeH / 2f,
+                radiusPx * 0.6f, radiusPx * 0.6f, tapePaint,
+            )
+            canvas.restore()
+        }
+
+        override fun getOutline(outline: Outline) {
+            outline.setRoundRect(bounds, radiusPx)
+            outline.alpha = 1f
+        }
+
+        override fun setAlpha(alpha: Int) {}
+        override fun setColorFilter(colorFilter: ColorFilter?) {}
+        @Deprecated("required override", ReplaceWith("PixelFormat.TRANSLUCENT"))
+        override fun getOpacity() = PixelFormat.TRANSLUCENT
     }
 
     private fun assetItems(): MutableList<Slide> {

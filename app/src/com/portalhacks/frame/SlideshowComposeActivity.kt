@@ -128,6 +128,8 @@ class SlideshowComposeActivity : ComponentActivity() {
         // Re-apply the clock position/size (picks up a Settings "reset" done while away).
         controller.applyClockTransform()
         val prefs = getSharedPreferences(ConfigReceiver.PREFS, MODE_PRIVATE)
+        // Pick up a sticky note set over ADB / Settings while we were away.
+        controller.setNote(prefs.getString(ConfigReceiver.KEY_NOTE, "") ?: "")
 
         // "Only show clock in low light": watch the ambient light sensor when enabled.
         sensorManager.unregisterListener(lightListener)
