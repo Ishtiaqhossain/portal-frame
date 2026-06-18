@@ -139,13 +139,17 @@ class SlideshowController(
     private var clockDy = 0f
     private var clockScale = 1f
 
-    // Sticky-note state. Text is set over ADB / Settings ("" hides it); dx/dy are the note's
-    // position as a fraction of screen W/H from its top-right anchor (drag to move). Vars so
-    // they update live. draggingNote is true between grabbing the note and releasing it.
+    // Sticky-note state. noteText is the manually-set note (over ADB / Settings; "" = none). When
+    // it's empty and fortune mode is on, the note instead shows fortuneLine — a fetched
+    // "fortune cookie" wisdom line. dx/dy are the note's position as a fraction of screen W/H from
+    // its top-right anchor (drag to move). Vars so they update live; draggingNote is true between
+    // grabbing the note and releasing it.
     private var noteText = ""
     private var noteDx = 0f
     private var noteDy = 0f
     private var draggingNote = false
+    private val fortuneEnabled: Boolean
+    private var fortuneLine: String? = null
 
     init {
         val dm = context.resources.displayMetrics
@@ -173,6 +177,7 @@ class SlideshowController(
         noteText = prefs.getString(ConfigReceiver.KEY_NOTE, "") ?: ""
         noteDx = prefs.getFloat(ConfigReceiver.KEY_NOTE_DX, 0f)
         noteDy = prefs.getFloat(ConfigReceiver.KEY_NOTE_DY, 0f)
+        fortuneEnabled = prefs.getBoolean(ConfigReceiver.KEY_FORTUNE, ConfigReceiver.DEFAULT_FORTUNE)
         monthYearFmt.timeZone = TimeZone.getTimeZone("UTC")
 
         root.setBackgroundColor(Color.BLACK)
@@ -449,6 +454,7 @@ class SlideshowController(
         if (showClock) {
             startWeather()
         }
+        startFortune()
         shimmer.startSweep()
     }
 
@@ -471,13 +477,21 @@ class SlideshowController(
         applyNote()
     }
 
-    /** Show the note iff it has text and we're not in low-light clock-only mode. */
+    /**
+     * Show the note when there's something to say and we're not in low-light clock-only mode. A
+     * manually-set note wins; otherwise, in fortune mode, the fetched wisdom line is shown.
+     */
     private fun applyNote() {
-        val t = noteText.trim()
-        if (t.isEmpty() || clockOnly) {
+        val manual = noteText.trim()
+        val text = when {
+            manual.isNotEmpty() -> manual
+            fortuneEnabled -> fortuneLine?.trim().orEmpty()
+            else -> ""
+        }
+        if (text.isEmpty() || clockOnly) {
             noteBox.visibility = View.GONE
         } else {
-            noteBox.text = t
+            noteBox.text = text
             noteBox.visibility = View.VISIBLE
             noteBox.translationX = noteDx * reqW
             noteBox.translationY = noteDy * reqH
@@ -560,6 +574,7 @@ class SlideshowController(
     /** Clear the note (text + position) and animate it away. */
     private fun dismissNote() {
         noteText = ""
+        fortuneLine = null // a dismissed fortune stays gone until the next refresh brings a new one
         noteDx = 0f
         noteDy = 0f
         context.getSharedPreferences(ConfigReceiver.PREFS, Context.MODE_PRIVATE).edit()
@@ -842,6 +857,7 @@ class SlideshowController(
         if (showClock) {
             startWeather()
         }
+        startFortune()
         if (!shimmerHidden) {
             shimmer.startSweep()
         }
@@ -874,6 +890,7 @@ class SlideshowController(
         handler.removeCallbacks(autoTick)
         handler.removeCallbacks(clockTick)
         handler.removeCallbacks(weatherTick)
+        handler.removeCallbacks(fortuneTick)
         shimmer.stopSweep()
         front.animate().cancel()
         kbAnim?.let {
@@ -985,6 +1002,7 @@ class SlideshowController(
         if (showClock) {
             startWeather()
         }
+        startFortune()
         if (!shimmerHidden) {
             shimmer.startSweep()
         }
@@ -1518,6 +1536,36 @@ class SlideshowController(
         }
     }
 
+    private val fortuneTick = object : Runnable {
+        override fun run() {
+            refreshFortune()
+            handler.postDelayed(this, FORTUNE_INTERVAL_MS)
+        }
+    }
+
+    /** Begin (or re-arm) the periodic fortune refresh — only when fortune mode is active. */
+    private fun startFortune() {
+        if (!fortuneEnabled) {
+            return
+        }
+        handler.removeCallbacks(fortuneTick)
+        handler.postDelayed(fortuneTick, if (fortuneLine == null) 0 else FORTUNE_INTERVAL_MS)
+    }
+
+    private fun refreshFortune() {
+        // Skip while a manual note is showing — it takes precedence over the fortune.
+        if (!fortuneEnabled || noteText.isNotBlank()) {
+            return
+        }
+        loader.executor().execute {
+            val line = Fortune.fetch() ?: Fortune.bundled()
+            handler.post {
+                fortuneLine = line
+                applyNote()
+            }
+        }
+    }
+
     // ---------------------------------------------------------------- loading shimmer
 
     private fun hideShimmer() {
@@ -1699,6 +1747,7 @@ class SlideshowController(
         private const val TAP_TIMEOUT_MS = 350L
         private const val LONG_PRESS_MS = 700L // hold to open Photos setup
         private const val WEATHER_INTERVAL_MS = 30 * 60 * 1000L // refresh weather
+        private const val FORTUNE_INTERVAL_MS = 60 * 60 * 1000L // a fresh wisdom line each hour
 
         /**
          * Warm-overlay strength by time of day (Ambient-EQ-lite): none in daylight,
