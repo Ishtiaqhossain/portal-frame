@@ -1,6 +1,9 @@
 package com.portalhacks.frame
 
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.res.Configuration
 import android.hardware.Sensor
 import android.hardware.SensorEvent
@@ -58,6 +61,20 @@ class SlideshowComposeActivity : ComponentActivity() {
         override fun onAccuracyChanged(s: Sensor?, accuracy: Int) {}
     }
 
+    // Portal's presence feature powers the display off when nobody's around and back on when
+    // someone approaches — via the device's ambient/doze layer, which overrides our
+    // FLAG_KEEP_SCREEN_ON. That display-off can tear down the slideshow's clock/auto-advance ticks
+    // (see SlideshowController.stop) without delivering a clean Activity onResume when the screen
+    // returns, leaving the frame frozen on a stale clock over a black photo. Screen-on / unlock
+    // broadcasts fire reliably on that wake, so use them to force the slideshow to resume playback.
+    private val screenWakeReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (::controller.isInitialized) {
+                controller.resume()
+            }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(
@@ -93,6 +110,19 @@ class SlideshowComposeActivity : ComponentActivity() {
         setContent {
             AndroidView(factory = { root }, modifier = Modifier.fillMaxSize())
         }
+
+        registerReceiver(
+            screenWakeReceiver,
+            IntentFilter().apply {
+                addAction(Intent.ACTION_SCREEN_ON)
+                addAction(Intent.ACTION_USER_PRESENT)
+            },
+        )
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        runCatching { unregisterReceiver(screenWakeReceiver) }
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {

@@ -900,6 +900,40 @@ class SlideshowController(
     }
 
     /**
+     * Restart the time-driven machinery and re-render the current frame. Idempotent — safe to
+     * call when already playing. Used when the display powers back on (Portal presence/ambient)
+     * without a clean Activity onResume: the slideshow was observed frozen on a stale clock and a
+     * black photo after a presence-driven display-off, because [stop] had torn down the
+     * self-rescheduling clock / auto-advance / weather ticks and nothing restarted them. This is
+     * the targeted recovery — it does NOT re-fetch albums (onResume still owns that).
+     */
+    fun resume() {
+        startClock() // removeCallbacks + repost: restart the ticking clock (and night tint)
+        if (showClock) {
+            startWeather()
+        }
+        if (clockOnly) {
+            return // low-light clock-only mode: the centered clock is all that should run
+        }
+        if (items.isEmpty()) {
+            if (!shimmerHidden) {
+                shimmer.startSweep() // still loading the first photo — keep the shimmer alive
+            }
+            return
+        }
+        if (index !in items.indices) {
+            index = 0
+        }
+        if (running) {
+            scheduleAuto() // healthy but its auto-advance may have been deferred — re-arm it
+        } else {
+            // stop() ran on display-off and the photo/ticks were never restored: re-render now.
+            running = true
+            showImmediate(index)
+        }
+    }
+
+    /**
      * Re-read the screen size/orientation after a device rotation. The host Activity handles
      * orientation config changes itself (it isn't recreated), so without this the controller keeps
      * the dimensions and pairing axis it captured at construction — leaving e.g. top/bottom stacks
