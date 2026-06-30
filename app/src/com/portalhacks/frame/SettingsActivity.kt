@@ -227,6 +227,11 @@ class SettingsActivity : ComponentActivity() {
                 ToggleRow("Night warmth", ConfigReceiver.KEY_NIGHT, true) { tick++ }
                 Divider()
                 ToggleRow("On This Day memories", ConfigReceiver.KEY_ON_THIS_DAY, true) { tick++ }
+                Divider()
+                ToggleRow(
+                    "Sticky notes & fortunes", ConfigReceiver.KEY_NOTES, ConfigReceiver.DEFAULT_NOTES,
+                    subtitle = "Show a post-it note on the frame, or a fetched wisdom line when no note is set.",
+                ) { tick++ }
             }
         }
 

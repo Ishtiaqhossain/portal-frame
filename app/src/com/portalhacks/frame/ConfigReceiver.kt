@@ -99,11 +99,13 @@ class ConfigReceiver : BroadcastReceiver() {
         const val KEY_ALBUMS = "album_urls" // JSON array of configured album URLs
         const val KEY_ALBUMS_DISABLED = "album_urls_disabled" // JSON array of stopped album URLs
         const val KEY_GUARD = "screensaver_guard" // boolean: keep re-asserting Frame as the dream
+        const val KEY_NOTES = "sticky_notes" // master switch for the whole sticky-note + fortune overlay
         const val KEY_NOTE = "note" // sticky-note text shown on the frame ("" = hidden)
         const val KEY_NOTE_DX = "note_dx" // note position (fraction of screen W) from its top-right anchor
         const val KEY_NOTE_DY = "note_dy" // note position (fraction of screen H) from its top-right anchor
         const val KEY_FORTUNE = "fortune" // when no manual note is set, show a fetched wisdom line
         const val DEFAULT_FORTUNE = true
+        const val DEFAULT_NOTES = false // sticky-note/fortune overlay is off unless the user opts in
 
         // Slideshow settings (written by PhotosActivity, read by SlideshowController).
         const val KEY_DELAY_MS = "delay_ms"     // ms each photo is held
@@ -152,7 +154,7 @@ class ConfigReceiver : BroadcastReceiver() {
             arrayOf("night", KEY_NIGHT), arrayOf("on_this_day", KEY_ON_THIS_DAY),
             arrayOf("captions", KEY_CAPTIONS), arrayOf("face_framing", KEY_FACE), arrayOf("ambient_color", KEY_AMBIENT),
             arrayOf("auto_enhance", KEY_ENHANCE), arrayOf("zoom_fill", KEY_ZOOM_FILL),
-            arrayOf("fortune", KEY_FORTUNE),
+            arrayOf("fortune", KEY_FORTUNE), arrayOf("sticky_notes", KEY_NOTES),
         )
 
         // Per-album photo caches are managed by AlbumCache (keyed by album URL).

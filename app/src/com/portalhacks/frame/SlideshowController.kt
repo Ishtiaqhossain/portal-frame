@@ -149,6 +149,9 @@ class SlideshowController(
     private var noteDx = 0f
     private var noteDy = 0f
     private var draggingNote = false
+    // Master switch for the whole sticky-note + fortune overlay (off unless the user opts in).
+    // When false the note never shows and the fortune line is never fetched.
+    private val notesEnabled: Boolean
     private val fortuneEnabled: Boolean
     private var fortuneLine: String? = null
 
@@ -178,6 +181,7 @@ class SlideshowController(
         noteText = prefs.getString(ConfigReceiver.KEY_NOTE, "") ?: ""
         noteDx = prefs.getFloat(ConfigReceiver.KEY_NOTE_DX, 0f)
         noteDy = prefs.getFloat(ConfigReceiver.KEY_NOTE_DY, 0f)
+        notesEnabled = prefs.getBoolean(ConfigReceiver.KEY_NOTES, ConfigReceiver.DEFAULT_NOTES)
         fortuneEnabled = prefs.getBoolean(ConfigReceiver.KEY_FORTUNE, ConfigReceiver.DEFAULT_FORTUNE)
         monthYearFmt.timeZone = TimeZone.getTimeZone("UTC")
 
@@ -493,6 +497,10 @@ class SlideshowController(
      * manually-set note wins; otherwise, in fortune mode, the fetched wisdom line is shown.
      */
     private fun applyNote() {
+        if (!notesEnabled) {
+            noteBox.visibility = View.GONE
+            return
+        }
         val manual = noteText.trim()
         val text = when {
             manual.isNotEmpty() -> manual
@@ -1558,7 +1566,7 @@ class SlideshowController(
 
     /** Begin (or re-arm) the periodic fortune refresh — only when fortune mode is active. */
     private fun startFortune() {
-        if (!fortuneEnabled) {
+        if (!notesEnabled || !fortuneEnabled) {
             return
         }
         handler.removeCallbacks(fortuneTick)
