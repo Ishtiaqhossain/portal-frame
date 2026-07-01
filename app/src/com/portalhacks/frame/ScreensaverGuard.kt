@@ -34,9 +34,28 @@ import android.util.Log
  */
 object Screensaver {
     const val COMPONENT = "com.portalhacks.frame/.FrameDreamService"
+
+    /**
+     * The Immortal launcher (github.com/starbrightlab/immortal). It owns the system dream
+     * aggressively — re-asserting it on every home resume — and, when its own screensaver is
+     * turned off, it disables the whole dream via `screensaver_enabled` (leaving
+     * `screensaver_components` alone). Frame watches that extra signal only when Immortal is
+     * present so it can still run as the screensaver; see [ScreensaverGuardService].
+     */
+    const val IMMORTAL_PACKAGE = "com.immortal.launcher"
+
     private const val ENABLED = "screensaver_enabled"
     private const val COMPONENTS = "screensaver_components"
     private const val TAG = "PortalFrame"
+
+    /** True if the Immortal launcher is installed (it manages the dream itself). */
+    fun immortalInstalled(ctx: Context): Boolean = try {
+        // Frame targets API 29, so package visibility filtering doesn't apply — no <queries> needed.
+        ctx.packageManager.getPackageInfo(IMMORTAL_PACKAGE, 0)
+        true
+    } catch (_: Exception) {
+        false
+    }
 
     /** True if Frame is the enabled system screensaver. */
     fun isOurs(ctx: Context): Boolean = try {
@@ -98,6 +117,17 @@ class ScreensaverGuardService : Service() {
         contentResolver.registerContentObserver(
             Settings.Secure.getUriFor("screensaver_components"), false, obs,
         )
+        // The Immortal launcher turns the system dream OFF via `screensaver_enabled` (it leaves
+        // `screensaver_components` alone when its own screensaver is off), so Frame would never
+        // notice and its dream would stay disabled. Watch that key too, but ONLY when Immortal is
+        // installed — on the stock launcher this observer isn't registered, so behaviour there is
+        // exactly as before (no regression).
+        if (Screensaver.immortalInstalled(this)) {
+            contentResolver.registerContentObserver(
+                Settings.Secure.getUriFor("screensaver_enabled"), false, obs,
+            )
+            Log.i(TAG, "guard: Immortal detected — also watching screensaver_enabled")
+        }
         observer = obs
 
         // Claim immediately in case the slot was already taken before we started.

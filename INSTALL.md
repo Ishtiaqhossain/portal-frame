@@ -134,6 +134,21 @@ Then open Frame and tap **Use as screensaver** again. Frame will now re-assert i
 launcher tries to take the slot back, so it survives rotations and reboots. (Until you grant this,
 Frame falls back to the normal system picker and the launcher may still reset it.)
 
+#### Using Frame with the Immortal launcher
+If you run the [Immortal launcher](https://github.com/starbrightlab/immortal), it has its **own**
+photo-frame screensaver and manages the screensaver slot itself, so a couple of extra steps let
+Frame take over:
+
+1. In **Immortal → Settings → Screensaver**, turn **Immortal's screensaver OFF**. (While it's on,
+   Immortal re-shows its own frame and Frame can't win the slot.)
+2. Grant Frame the one-time ADB permission above
+   (`adb shell pm grant com.portalhacks.frame android.permission.WRITE_SECURE_SETTINGS`).
+3. Open Frame and tap **Use as screensaver**.
+
+Frame detects Immortal and shows this reminder on its setup screen. It also handles Immortal's habit
+of switching the system screensaver *off* when its own is disabled — Frame keeps the slot enabled so
+your photos still appear when the Portal is idle.
+
 ---
 
 ## Part 3 — Using Frame day to day

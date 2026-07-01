@@ -204,6 +204,16 @@ class SettingsActivity : ComponentActivity() {
                 Spacer(Modifier.height(12.dp))
                 if (active) PrimaryBtn("Change screensaver") { openScreensaver() }
                 else PrimaryBtn("Use as screensaver") { enableScreensaver(); tick++ }
+                if (Screensaver.immortalInstalled(ctx)) {
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        "Using the Immortal launcher? It runs its own screensaver. In " +
+                            "Immortal → Settings → Screensaver, turn Immortal's screensaver OFF so " +
+                            "Frame can take the slot. (Frame still needs its one-time ADB " +
+                            "screensaver permission — see the setup guide.)",
+                        color = PortalColors.TextBody, fontSize = 15.sp,
+                    )
+                }
             }
             Card(if (hasAlbum) "Albums" else "No albums yet") {
                 if (hasAlbum) {
