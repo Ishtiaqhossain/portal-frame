@@ -28,6 +28,7 @@
     <ID>FunctionParameterNaming:ImageLoader.kt$ImageLoader.Companion$`in`: IntArray</ID>
     <ID>ImplicitDefaultLocale:DropAuth.kt$DropAuth$String.format("%02x", b.toInt() and 0xff)</ID>
     <ID>ImplicitDefaultLocale:ImageLoader.kt$ImageLoader.Companion$String.format("%032x", BigInteger(1, d))</ID>
+    <ID>LargeClass:SettingsActivity.kt$SettingsActivity : ComponentActivity</ID>
     <ID>LargeClass:SlideshowController.kt$SlideshowController</ID>
     <ID>LongMethod:ConfigReceiver.kt$ConfigReceiver$override fun onReceive(ctx: Context, intent: Intent?)</ID>
     <ID>LongMethod:LocalDropServer.kt$LocalDropServer$private fun handleUpload(input: BufferedInputStream, headers: Map&lt;String, String&gt;, out: OutputStream)</ID>

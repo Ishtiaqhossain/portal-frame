@@ -290,6 +290,19 @@ class SettingsActivity : ComponentActivity() {
                         subtitle = "Long-press the clock on the screensaver to move or resize it.",
                     ) { tick++ }
                     Divider()
+                    var clockFaceId by remember {
+                        mutableStateOf(
+                            prefs.getString(ConfigReceiver.KEY_CLOCK_FACE, ConfigReceiver.DEFAULT_CLOCK_FACE)
+                                ?: ConfigReceiver.DEFAULT_CLOCK_FACE,
+                        )
+                    }
+                    CycleRow("Clock face", ConfigReceiver.clockFaceName(clockFaceId)) {
+                        val ids = ConfigReceiver.CLOCK_FACES.map { it.first }
+                        clockFaceId = ids[(ids.indexOf(clockFaceId).coerceAtLeast(0) + 1) % ids.size]
+                        prefs.edit().putString(ConfigReceiver.KEY_CLOCK_FACE, clockFaceId).apply()
+                        tick++
+                    }
+                    Divider()
                     CycleRow("Clock position & size", "Reset") {
                         prefs.edit()
                             .putFloat(ConfigReceiver.KEY_CLOCK_DX, ConfigReceiver.DEFAULT_CLOCK_DX)

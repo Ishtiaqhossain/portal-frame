@@ -108,6 +108,7 @@ class SlideshowController(
     private val pairs: Boolean // pair two photos to fill the screen (side-by-side or stacked)
     private val kenBurns: Boolean // cinematic slow pan + zoom while held
     private val showClock: Boolean // clock + weather overlay
+    private val clockFaceId: String // which overlay clock style to draw (see applyClockFace)
     private val nightMode: Boolean // warm night dimming
     private val onThisDay: Boolean // surface "N years ago today" memories
     private val captions: Boolean // photo date captions (lower-right)
@@ -168,6 +169,8 @@ class SlideshowController(
         pairs = prefs.getBoolean(ConfigReceiver.KEY_PAIRS, ConfigReceiver.DEFAULT_PAIRS)
         kenBurns = prefs.getBoolean(ConfigReceiver.KEY_KEN_BURNS, ConfigReceiver.DEFAULT_KEN_BURNS)
         showClock = prefs.getBoolean(ConfigReceiver.KEY_CLOCK, ConfigReceiver.DEFAULT_CLOCK)
+        clockFaceId = prefs.getString(ConfigReceiver.KEY_CLOCK_FACE, ConfigReceiver.DEFAULT_CLOCK_FACE)
+            ?: ConfigReceiver.DEFAULT_CLOCK_FACE
         nightMode = prefs.getBoolean(ConfigReceiver.KEY_NIGHT, ConfigReceiver.DEFAULT_NIGHT)
         onThisDay = prefs.getBoolean(ConfigReceiver.KEY_ON_THIS_DAY, ConfigReceiver.DEFAULT_ON_THIS_DAY)
         captions = prefs.getBoolean(ConfigReceiver.KEY_CAPTIONS, ConfigReceiver.DEFAULT_CAPTIONS)
@@ -420,6 +423,7 @@ class SlideshowController(
         )
         bdlp.topMargin = Ui.dp(context, 4f)
         clockOnlyBox.addView(bigDate, bdlp)
+        applyClockFace() // restyle the overlay clock per the chosen face (default: classic)
         // Full-width box so the centered clock never clips; vertically centred on screen.
         val colp = FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT,
@@ -617,6 +621,30 @@ class SlideshowController(
         g.setColor(if (hover) 0xE6D23B3B.toInt() else 0xCC1E1E1E.toInt())
         g.cornerRadius = Ui.dp(context, 20f).toFloat()
         return g
+    }
+
+    // ------------------------------------------------ clock face
+
+    /**
+     * Style the bottom-left overlay clock per [clockFaceId] — the "Clock face" option. Each face
+     * varies the time's typeface and size and whether the date/weather line shows; the low-light
+     * centred clock ([bigClock]) follows the same "show the date line?" choice for consistency.
+     * The user's move/resize transform ([applyClockTransform]) still composes on top of this.
+     */
+    private fun applyClockFace() {
+        var timeSp = 80f
+        var typeface = Ui.clockFace(context)
+        var showDate = true
+        when (clockFaceId) {
+            "minimal" -> { timeSp = 54f; showDate = false } // just the time, quietly
+            "big" -> { timeSp = 132f } // a statement clock
+            "modern" -> { timeSp = 84f; typeface = Ui.bold(context) } // Inter Bold, editorial
+            else -> {} // "classic": the Portal-native clock font, date + weather
+        }
+        clock.setTextSize(TypedValue.COMPLEX_UNIT_SP, timeSp)
+        clock.typeface = typeface
+        dateLine.visibility = if (showDate) View.VISIBLE else View.GONE
+        bigDate.visibility = if (showDate) View.VISIBLE else View.GONE
     }
 
     // ------------------------------------------------ clock move/resize

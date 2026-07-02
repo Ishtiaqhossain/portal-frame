@@ -45,6 +45,14 @@ class ConfigReceiver : BroadcastReceiver() {
             prefs.edit().putString(KEY_NOTE, note).apply()
             Log.i("PortalFrame", "note set (${note.length} chars)")
         }
+        // Pick the overlay clock style over ADB (also selectable in Settings): --es clock_face big
+        if (intent.hasExtra("clock_face")) {
+            val face = intent.getStringExtra("clock_face")?.trim().orEmpty()
+            if (CLOCK_FACES.any { it.first == face }) {
+                prefs.edit().putString(KEY_CLOCK_FACE, face).apply()
+                Log.i("PortalFrame", "clock face set to: $face")
+            }
+        }
         if (intent.hasExtra("remove_url")) {
             val url = intent.getStringExtra("remove_url")?.trim() ?: ""
             if (url.isNotEmpty()) {
@@ -115,6 +123,8 @@ class ConfigReceiver : BroadcastReceiver() {
         const val KEY_PAIRS = "pairs"           // boolean: pair two photos to fill the screen
         const val KEY_KEN_BURNS = "ken_burns"   // boolean: cinematic pan/zoom
         const val KEY_CLOCK = "clock"           // boolean: clock + weather overlay
+        const val KEY_CLOCK_FACE = "clock_face" // which overlay clock style to draw (see CLOCK_FACES)
+        const val DEFAULT_CLOCK_FACE = "classic"
         const val KEY_CLOCK_LOW_LIGHT = "clock_low_light" // boolean: clock-only in low light
         const val KEY_NIGHT = "night"           // boolean: warm night dimming
         const val KEY_ON_THIS_DAY = "on_this_day" // boolean: surface memories
@@ -159,6 +169,19 @@ class ConfigReceiver : BroadcastReceiver() {
         )
 
         // Per-album photo caches are managed by AlbumCache (keyed by album URL).
+
+        // Overlay clock styles (id -> display name), in cycle order. Rendered by
+        // SlideshowController.applyClockFace; picked in Settings → Clock & night.
+        val CLOCK_FACES = listOf(
+            "classic" to "Classic",
+            "minimal" to "Minimal",
+            "big" to "Big",
+            "modern" to "Modern",
+        )
+
+        /** Display name for a clock-face id (falls back to Classic for anything unknown). */
+        fun clockFaceName(id: String?): String =
+            CLOCK_FACES.firstOrNull { it.first == id }?.second ?: CLOCK_FACES.first().second
 
         /** True for a recognised shared-album HTTPS link (Google Photos or iCloud). */
         fun isAlbumUrl(s: String?): Boolean = PhotoSources.matches(s)
