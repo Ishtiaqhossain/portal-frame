@@ -8,6 +8,12 @@ style:
   ReturnCount:
     # Guard-clause early returns are idiomatic Kotlin here.
     active: false
+complexity:
+  LongParameterList:
+    # Canvas draw helpers idiomatically take (canvas, x, y, w, h, color, …); a couple extra
+    # geometric args is clearer than threading them through fields.
+    functionThreshold: 8
+    constructorThreshold: 8
 naming:
   FunctionNaming:
     # @Composable functions are intentionally PascalCase.

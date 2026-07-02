@@ -177,6 +177,9 @@ class ConfigReceiver : BroadcastReceiver() {
             "minimal" to "Minimal",
             "big" to "Big",
             "modern" to "Modern",
+            "flip" to "Flip clock",
+            "nixie" to "Nixie tube",
+            "analog" to "Analog",
         )
 
         /** Display name for a clock-face id (falls back to Classic for anything unknown). */

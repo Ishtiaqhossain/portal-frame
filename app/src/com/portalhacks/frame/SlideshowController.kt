@@ -72,6 +72,7 @@ class SlideshowController(
     private val info: TextView
     private val clock: TextView
     private val clockBox: LinearLayout
+    private val clockFaceView: ClockFaceView // custom-drawn faces (flip/nixie/analog); hidden for text faces
     private val bigClock: TextView // centered, larger clock for low-light mode
     private val bigDate: TextView
     private val clockOnlyBox: LinearLayout
@@ -277,6 +278,9 @@ class SlideshowController(
         clockBox.orientation = LinearLayout.VERTICAL
         clockBox.addView(clock)
         clockBox.addView(dateLine)
+        clockFaceView = ClockFaceView(context)
+        clockFaceView.visibility = View.GONE
+        clockBox.addView(clockFaceView)
         val cbp = FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.WRAP_CONTENT,
             FrameLayout.LayoutParams.WRAP_CONTENT,
@@ -632,6 +636,16 @@ class SlideshowController(
      * The user's move/resize transform ([applyClockTransform]) still composes on top of this.
      */
     private fun applyClockFace() {
+        // The custom-drawn faces (flip/nixie/analog) replace the text clock entirely.
+        if (clockFaceId in ClockFaceView.FACES) {
+            clockFaceView.setFace(clockFaceId)
+            clockFaceView.visibility = View.VISIBLE
+            clock.visibility = View.GONE
+            dateLine.visibility = View.GONE
+            return
+        }
+        clockFaceView.visibility = View.GONE
+        clock.visibility = View.VISIBLE
         var timeSp = 80f
         var typeface = Ui.clockFace(context)
         var showDate = true
@@ -936,6 +950,7 @@ class SlideshowController(
         running = false
         handler.removeCallbacks(autoTick)
         handler.removeCallbacks(clockTick)
+        handler.removeCallbacks(secondsTick)
         handler.removeCallbacks(weatherTick)
         handler.removeCallbacks(fortuneTick)
         shimmer.stopSweep()
@@ -1551,10 +1566,21 @@ class SlideshowController(
         }
     }
 
+    // Sweeps the analog second hand. Only posted while the analog face is showing, so the other
+    // faces (and the text clocks) still tick once a minute.
+    private val secondsTick = object : Runnable {
+        override fun run() {
+            if (showClock && clockFaceId == "analog") clockFaceView.invalidate()
+            handler.postDelayed(this, 1000L)
+        }
+    }
+
     private fun startClock() {
         handler.removeCallbacks(clockTick)
+        handler.removeCallbacks(secondsTick)
         updateClock()
         handler.postDelayed(clockTick, 60000 - System.currentTimeMillis() % 60000)
+        if (clockFaceId == "analog") handler.postDelayed(secondsTick, 1000L)
     }
 
     private fun updateClock() {
@@ -1569,6 +1595,12 @@ class SlideshowController(
         // Centered low-light clock (no weather) — kept current even when the overlay is off.
         bigClock.text = time
         bigDate.text = date
+        // A designed face draws itself from the current time; just repaint it (the analog's second
+        // hand is driven faster by [secondsTick]).
+        if (clockFaceId in ClockFaceView.FACES) {
+            if (showClock) clockFaceView.invalidate()
+            return
+        }
         if (!showClock) {
             return // night tint still updates above; the overlay clock/weather text is off
         }
