@@ -10,17 +10,17 @@ captions, cinematic motion, and ambient color.
 
 <br>
 
-[![CI](https://img.shields.io/github/actions/workflow/status/Ishtiaqhossain/Portal-Frame/ci.yml?branch=main&label=CI&logo=github&style=flat-square)](https://github.com/Ishtiaqhossain/Portal-Frame/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/Ishtiaqhossain/Portal-Frame?label=release&logo=github&style=flat-square)](https://github.com/Ishtiaqhossain/Portal-Frame/releases/latest)
-[![Downloads](https://img.shields.io/github/downloads/Ishtiaqhossain/Portal-Frame/total?logo=github&style=flat-square)](https://github.com/Ishtiaqhossain/Portal-Frame/releases)
-[![License: MIT](https://img.shields.io/github/license/Ishtiaqhossain/Portal-Frame?style=flat-square&color=blue)](LICENSE)
+[![CI](https://img.shields.io/github/actions/workflow/status/Ishtiaqhossain/portal-frame/ci.yml?branch=main&label=CI&logo=github&style=flat-square)](https://github.com/Ishtiaqhossain/portal-frame/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/Ishtiaqhossain/portal-frame?label=release&logo=github&style=flat-square)](https://github.com/Ishtiaqhossain/portal-frame/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/Ishtiaqhossain/portal-frame/total?logo=github&style=flat-square)](https://github.com/Ishtiaqhossain/portal-frame/releases)
+[![License: MIT](https://img.shields.io/github/license/Ishtiaqhossain/portal-frame?style=flat-square&color=blue)](LICENSE)
 
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.4.0-7F52FF?logo=kotlin&logoColor=white&style=flat-square)](https://kotlinlang.org)
 [![Jetpack Compose](https://img.shields.io/badge/Jetpack%20Compose-4285F4?logo=jetpackcompose&logoColor=white&style=flat-square)](https://developer.android.com/jetpack/compose)
 [![Android 10 · API 29](https://img.shields.io/badge/Android%2010-API%2029-3DDC84?logo=android&logoColor=white&style=flat-square)](https://developer.android.com)
 [![Meta Portal Go](https://img.shields.io/badge/Meta%20Portal%20Go-0467DF?logo=meta&logoColor=white&style=flat-square)](https://www.meta.com/portal/)
 
-**[⬇️ Download APK](https://github.com/Ishtiaqhossain/Portal-Frame/releases/latest/download/Frame.apk)** ·
+**[⬇️ Download APK](https://github.com/Ishtiaqhossain/portal-frame/releases/latest/download/Frame.apk)** ·
 **[📖 Install Guide](INSTALL.md)** ·
 **[✨ Features](#-features)** ·
 **[🛠️ Developers](#-for-developers)** ·
@@ -34,10 +34,10 @@ captions, cinematic motion, and ambient color.
 
 ## 📥 Install it on a Portal
 
-### ⬇️ [Download the latest APK](https://github.com/Ishtiaqhossain/Portal-Frame/releases/latest/download/Frame.apk)
+### ⬇️ [Download the latest APK](https://github.com/Ishtiaqhossain/portal-frame/releases/latest/download/Frame.apk)
 
 That link always serves the newest signed release. Prefer to pick a version (or grab the
-`.sha256` checksum)? Browse all builds on the **[Releases page](https://github.com/Ishtiaqhossain/Portal-Frame/releases/latest)**.
+`.sha256` checksum)? Browse all builds on the **[Releases page](https://github.com/Ishtiaqhossain/portal-frame/releases/latest)**.
 
 Then follow the **[Install & User Guide](INSTALL.md)** — install the APK, add your album, and turn it
 on as the screensaver.
