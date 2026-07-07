@@ -1,6 +1,6 @@
 # Screenshots
 
-Captured on a Meta Portal Go (1280×800). **PII scrubbed** — real photos, album
+Captured on a Meta Portal (1280×800). **PII scrubbed** — real photos, album
 titles, and album URL tokens are replaced with sample images / generic labels, and
 the live camera preview is masked.
 

@@ -5,7 +5,7 @@ Guidance for AI assistants (and humans) working in this repo.
 ## What this is
 
 **Frame** (repo: PortalFrame, app id `com.portalhacks.frame`) — an Android slideshow /
-screensaver for the **Meta Portal Go** (Android 10 / API 29) that shows Google Photos and iCloud
+screensaver for the **Meta Portal** (Android 10 / API 29) that shows Google Photos and iCloud
 shared albums, plus photos pushed from a phone over Wi‑Fi (the "AirDrop for Portal" drop). App is
 100% Kotlin — Jetpack Compose for the settings screens, Android Views for the slideshow/scanner.
 No cloud backend; the only server is an on-device, LAN-only photo-drop HTTP server (see Architecture).

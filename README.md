@@ -2,7 +2,7 @@
 
 # 🖼️ Frame
 
-### An open-source photo screensaver for the Meta Portal Go
+### An open-source photo screensaver for the Meta Portal
 
 Show your **Google Photos** or **iCloud** shared albums — or photos you **push straight from your phone**
 over Wi‑Fi — whenever your Portal is idle. Set it up on-device by scanning a QR code, then enjoy a clock,
@@ -18,7 +18,7 @@ captions, cinematic motion, and ambient color.
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.4.0-7F52FF?logo=kotlin&logoColor=white&style=flat-square)](https://kotlinlang.org)
 [![Jetpack Compose](https://img.shields.io/badge/Jetpack%20Compose-4285F4?logo=jetpackcompose&logoColor=white&style=flat-square)](https://developer.android.com/jetpack/compose)
 [![Android 10 · API 29](https://img.shields.io/badge/Android%2010-API%2029-3DDC84?logo=android&logoColor=white&style=flat-square)](https://developer.android.com)
-[![Meta Portal Go](https://img.shields.io/badge/Meta%20Portal%20Go-0467DF?logo=meta&logoColor=white&style=flat-square)](https://www.meta.com/portal/)
+[![Meta Portal](https://img.shields.io/badge/Meta%20Portal-0467DF?logo=meta&logoColor=white&style=flat-square)](https://www.meta.com/portal/)
 
 **[⬇️ Download APK](https://github.com/Ishtiaqhossain/portal-frame/releases/latest/download/Frame.apk)** ·
 **[📖 Install Guide](INSTALL.md)** ·
@@ -28,7 +28,7 @@ captions, cinematic motion, and ambient color.
 
 </div>
 
-> **Repo:** `PortalFrame` (`com.portalhacks.frame`) · **App name:** Frame · **Target:** Meta Portal Go (Android 10 / API 29)
+> **Repo:** `PortalFrame` (`com.portalhacks.frame`) · **App name:** Frame · **Target:** Meta Portal (Android 10 / API 29)
 
 ---
 
@@ -98,5 +98,5 @@ Released under the **[MIT License](LICENSE)** — third-party attributions in [N
 See **[SECURITY.md](SECURITY.md)** for the trust model and how to report issues.
 
 <div align="center">
-<sub>Built with ❤️ for the Meta Portal Go · Not affiliated with Meta Platforms, Inc.</sub>
+<sub>Built with ❤️ for the Meta Portal · Not affiliated with Meta Platforms, Inc.</sub>
 </div>

@@ -1,7 +1,7 @@
 # Contributing to Frame
 
 Thanks for your interest! Frame is a hobby/open-source slideshow + screensaver for the
-Meta Portal Go. Contributions, bug reports, and ideas are welcome.
+Meta Portal. Contributions, bug reports, and ideas are welcome.
 
 ## Building
 
@@ -38,9 +38,9 @@ commit one.
 > predates the Compose migration and only compiles the Java sources — it won't produce a working
 > APK of the current app. Use Gradle.
 
-## Installing / testing on a Portal Go
+## Installing / testing on a Portal
 
-See the **Install & run on Portal Go** section of the [README](README.md). In short:
+See the **Install & run on Portal** section of the [README](README.md). In short:
 
 ```bash
 adb install -r app/build/outputs/apk/debug/app-debug.apk

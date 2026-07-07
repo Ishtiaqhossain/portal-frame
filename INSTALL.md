@@ -1,6 +1,6 @@
 # Frame — Install & User Guide
 
-Turn your **Meta Portal Go** into a digital photo frame. It can play your **Google Photos** or
+Turn your **Meta Portal** into a digital photo frame. It can play your **Google Photos** or
 **iCloud** shared albums, and/or photos you **push straight from your phone** over Wi‑Fi — whenever
 it's idle. You install a ready-made `Frame-*.apk` — you don't need to build anything.
 
@@ -22,7 +22,7 @@ to verify the download). Save it to the computer you'll use in Part 1.
 
 ## What you'll need
 
-- A **Meta Portal Go**, charged and connected to Wi‑Fi.
+- A **Meta Portal**, charged and connected to Wi‑Fi.
 - The **`Frame-*.apk`** you downloaded above.
 - A **computer** (Mac, Windows, or Linux) and a **USB cable** to connect the Portal — this is
   the one-time step to get the app onto the device. (The Portal has no app store, so apps are

@@ -1,6 +1,6 @@
 # Security Policy
 
-Frame is a sideloaded hobby app for the Meta Portal Go. It stores no accounts or credentials,
+Frame is a sideloaded hobby app for the Meta Portal. It stores no accounts or credentials,
 and its only inbound surface is an opt-in **local-network photo-drop server** (see below) used to
 push photos onto the frame from a phone on the same Wi-Fi. Here's the trust model and how to
 report issues.

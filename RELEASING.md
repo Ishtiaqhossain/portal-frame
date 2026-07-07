@@ -86,7 +86,7 @@ runs build and upload a workflow artifact but only **tag pushes** publish a publ
 
 ## Notes
 
-- Builds target **API 29** for the Portal Go and are distributed by sideload, not Google Play, so
+- Builds target **API 29** for the Portal and are distributed by sideload, not Google Play, so
   the Play "target a recent API level" lint error is disabled for release builds in
   `app/build.gradle.kts`.
 - The release APK is **not** `debuggable` and is signed with your stable key, so users can update
